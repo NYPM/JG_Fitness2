@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3.7">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.7">
+<link rel="manifest" href="manifest.webmanifest?v=3.8">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.8">
 <meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ok:#0a7b34;--ring:#3b82f6;}
@@ -38,9 +38,8 @@
 <div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3.7 • Classic UI • Today highlight + sets×reps</div>
+    <div class="sub">v3.8 • Today highlight + sets×reps fixed</div>
   </header>
-
   <nav class="tabs">
     <button class="tab active" id="tab-tracker">Tracker</button>
     <button class="tab" id="tab-train">Training Log</button>
@@ -48,247 +47,79 @@
     <button class="tab" id="tab-trends">Lift Trends</button>
     <button class="tab" id="tab-proj">Weight Projection</button>
   </nav>
-
   <main>
     <section id="page-tracker"></section>
-    <section id="page-train" style="display:none"></section>
-    <section id="page-bw" style="display:none"></section>
-    <section id="page-trends" style="display:none"></section>
-    <section id="page-proj" style="display:none"></section>
   </main>
 </div>
-
 <script>
-// ----- Helpers -----
-function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=('0'+(dt.getMonth()+1)).slice(-2), da=('0'+dt.getDate()).slice(-2); return y+'-'+m+'-'+da; }
-function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
-const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
-
-// ----- Core plan w/ rotations + travel block & sets×reps -----
-const START=new Date('2025-10-12T00:00:00'), END=new Date('2025-12-01T00:00:00');
+function isoLocal(d){const dt=new Date(d);return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
+function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();}
+const START=new Date('2025-10-12T00:00:00'),END=new Date('2025-12-01T00:00:00');
 const GOAL=[75.8,74.6,73.2,71.8,70.3,68.8,67.0];
 const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250,rest:150}},
           {w:[3,4,5],cal:1800,p:175,c:130,f:55,b:{strength:425,cardio:350,hiit:300,rest:150}},
           {w:[6,7],cal:1950,p:175,c:150,f:60,b:{strength:325,cardio:275,hiit:250,rest:150}}];
-function phase(w){ return PH.find(x=>x.w.includes(w))||PH[PH.length-1]; }
-function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function dn(d){ return d.toLocaleDateString('en-US',{weekday:'short'}); }
-function lab(d){ return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'}); }
-function isCheat(d){ const k=Math.floor((d-START)/86400000); return k>=0 && k%10===6; }
-const T_FROM=new Date('2025-10-16T00:00:00'), T_TO=new Date('2025-10-20T23:59:59');
-function isTravel(d){ return d>=T_FROM && d<=T_TO; }
-function wo(week, jsDay, d){
-  if(isTravel(d)){
-    if(jsDay===0) return "Travel — Active Recovery: Walk 30–40 min + mobility 10 min";
-    return "Travel — Skipping 10×(30s/15s); Push-Ups 3×15–20; Bodyweight Squats 3×20; Plank 3×60s; (Opt) Burpees 2×10";
-  }
-  const b = week<=2?1:(week<=4?2:3);
-  if(jsDay===1){ // Push
-    if(b===1) return "Push: Bench Press 4×8; Incline DB Press 3×10; Overhead Press 3×8; Cable Fly 3×15; Triceps Pushdown 3×12";
-    if(b===2) return "Push: DB Bench Press 4×8; Arnold Press 3×10; Pec Deck 3×15; Lateral Raise 3×15; Overhead Rope Extension 3×12";
-    return "Push: Close-Grip Bench 4×8; Seated DB Shoulder Press 3×10; Machine Fly 3×15; Lateral Raise 3×15; Skull Crushers 3×12";
-  }
-  if(jsDay===2){ // Pull
-    if(b===1) return "Pull: Deadlift 4×6; Lat Pulldown 3×10; Seated Row 3×10; Face Pull 3×15; DB Curl 3×10";
-    if(b===2) return "Pull: Rack Pull 4×6; Chin-Up 4×AMRAP; T-Bar Row 3×10; Rear Delt Fly 3×15; Hammer Curl 3×10";
-    return "Pull: Deadlift 4×6; DB Pullover 3×12; One-Arm Row 3×10; Face Pull 3×15; Cable Curl 3×12";
-  }
-  if(jsDay===3){ // Legs
-    if(b===1) return "Legs: Back Squat 4×8; Romanian Deadlift 3×10; Leg Press 3×12; Walking Lunge 3×12; Calf Raise 4×15";
-    if(b===2) return "Legs: Front Squat 4×6–8; Hip Thrust 3×10; Hack Squat 3×10; Step-Up 3×12; Calf Raise 4×15";
-    return "Legs: Bulgarian Split Squat 3×10/leg; Stiff-Leg Deadlift 3×10; Leg Extension 3×12; Leg Curl 3×12; Calf Raise 4×15";
-  }
-  if(jsDay===4){ return "Cardio: Zone 2 30–40 min + Mobility 10 min"; }
-  if(jsDay===5){ // Upper Power
-    if(b===1) return "Upper Power: Bench 5×5; Barbell Row 5×5; Pull-Ups AMRAP; Dips 3×10; Hanging Leg Raise 3×15";
-    if(b===2) return "Upper Power: Incline Bench 5×5; Weighted Chin-Up 5×5; DB Row 3×10; Close-Grip Push-Up 3×15; Cable Crunch 3×15";
-    return "Upper Power: Flat DB Press 5×5; Pendlay Row 5×5; Pull-Up AMRAP; Dips 3×12; Ab Wheel Rollout 3×10";
-  }
-  if(jsDay===6){ return "Cardio: Zone 2 30–40 min (or Skipping Intervals)"; }
-  return "Rest / Active Recovery (Walk + Stretch)";
+function phase(w){return PH.find(x=>x.w.includes(w))||PH[PH.length-1];}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
+function dn(d){return d.toLocaleDateString('en-US',{weekday:'short'});}
+function lab(d){return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'});}
+function isCheat(d){const k=Math.floor((d-START)/86400000);return k>=0&&k%10===6;}
+const T_FROM=new Date('2025-10-16T00:00:00'),T_TO=new Date('2025-10-20T23:59:59');
+function isTravel(d){return d>=T_FROM&&d<=T_TO;}
+function wo(week,jsDay,d){
+ if(isTravel(d)){if(jsDay===0)return"Travel — Active Recovery: Walk 30–40 min + mobility 10 min";
+  return"Travel — Skipping 10×(30s/15s); Push-Ups 3×15–20; Bodyweight Squats 3×20; Plank 3×60s; (Opt) Burpees 2×10";}
+ const b=week<=2?1:(week<=4?2:3);
+ if(jsDay===1){if(b===1)return"Push: Bench Press 4×8; Incline DB Press 3×10; Overhead Press 3×8; Cable Fly 3×15; Triceps Pushdown 3×12";
+  if(b===2)return"Push: DB Bench Press 4×8; Arnold Press 3×10; Pec Deck 3×15; Lateral Raise 3×15; Overhead Rope Extension 3×12";
+  return"Push: Close-Grip Bench 4×8; Seated DB Shoulder Press 3×10; Machine Fly 3×15; Lateral Raise 3×15; Skull Crushers 3×12";}
+ if(jsDay===2){if(b===1)return"Pull: Deadlift 4×6; Lat Pulldown 3×10; Seated Row 3×10; Face Pull 3×15; DB Curl 3×10";
+  if(b===2)return"Pull: Rack Pull 4×6; Chin-Up 4×AMRAP; T-Bar Row 3×10; Rear Delt Fly 3×15; Hammer Curl 3×10";
+  return"Pull: Deadlift 4×6; DB Pullover 3×12; One-Arm Row 3×10; Face Pull 3×15; Cable Curl 3×12";}
+ if(jsDay===3){if(b===1)return"Legs: Back Squat 4×8; Romanian Deadlift 3×10; Leg Press 3×12; Walking Lunge 3×12; Calf Raise 4×15";
+  if(b===2)return"Legs: Front Squat 4×6–8; Hip Thrust 3×10; Hack Squat 3×10; Step-Up 3×12; Calf Raise 4×15";
+  return"Legs: Bulgarian Split Squat 3×10/leg; Stiff-Leg Deadlift 3×10; Leg Extension 3×12; Leg Curl 3×12; Calf Raise 4×15";}
+ if(jsDay===4)return"Cardio: Zone 2 30–40 min + Mobility 10 min";
+ if(jsDay===5){if(b===1)return"Upper Power: Bench 5×5; Barbell Row 5×5; Pull-Ups AMRAP; Dips 3×10; Hanging Leg Raise 3×15";
+  if(b===2)return"Upper Power: Incline Bench 5×5; Weighted Chin-Up 5×5; DB Row 3×10; Close-Grip Push-Up 3×15; Cable Crunch 3×15";
+  return"Upper Power: Flat DB Press 5×5; Pendlay Row 5×5; Pull-Up AMRAP; Dips 3×12; Ab Wheel Rollout 3×10";}
+ if(jsDay===6)return"Cardio: Zone 2 30–40 min (or Skipping Intervals)";
+ return"Rest / Active Recovery (Walk + Stretch)";
 }
 function buildPlan(){
-  const out=[]; let d=new Date(START), w=1;
-  while(d<=END){
-    if(d.getDay()===1 && out.length) w++;
-    const ph=phase(w);
-    const desc=wo(w,d.getDay(),d);
-    let type = desc.startsWith("Cardio")?"cardio":(desc.startsWith("Upper Power")||desc.startsWith("Push")||desc.startsWith("Pull")||desc.startsWith("Legs")?"strength":(desc.startsWith("Travel")?(desc.includes("Skipping")?"hiit":"rest"):"rest"));
-    let cal=ph.cal, p=ph.p, c=ph.c, f=ph.f;
-    if(isCheat(d)){ cal=3000; type='rest'; }
-    const burn=ph.b[type]||ph.b.rest;
-    out.push({date:new Date(d), week:w, dayName:dn(d), label:lab(d), desc, type, cal, p, c, f, burn, goal: GOAL[Math.min(w-1,GOAL.length-1)]});
-    d=addDays(d,1);
-  }
-  return out;
-}
+ const out=[];let d=new Date(START),w=1;
+ while(d<=END){if(d.getDay()===1&&out.length)w++;const ph=phase(w);const desc=wo(w,d.getDay(),d);
+ let type=desc.startsWith("Cardio")?"cardio":(desc.startsWith("Upper Power")||desc.startsWith("Push")||desc.startsWith("Pull")||desc.startsWith("Legs")?"strength":(desc.startsWith("Travel")?(desc.includes("Skipping")?"hiit":"rest"):"rest"));
+ let cal=ph.cal,p=ph.p,c=ph.c,f=ph.f;if(isCheat(d)){cal=3000;type='rest';}const burn=ph.b[type]||ph.b.rest;
+ out.push({date:new Date(d),week:w,dayName:dn(d),label:lab(d),desc,type,cal,p,c,f,burn,goal:GOAL[Math.min(w-1,GOAL.length-1)]});
+ d=addDays(d,1);}return out;}
+function dn(d){return d.toLocaleDateString('en-US',{weekday:'short'});}function lab(d){return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'});}
 const planDays=buildPlan();
 
-// ----- UI helpers -----
-function el(tag, props={}, ...kids){ const e=document.createElement(tag); Object.entries(props).forEach(([k,v])=>{ if(k==='class') e.className=v; else if(k==='html') e.innerHTML=v; else e.setAttribute(k,v); }); kids.flat().forEach(k=>{ if(typeof k==='string') e.appendChild(document.createTextNode(k)); else if(k) e.appendChild(k); }); return e; }
-function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
+function el(tag,props={},...kids){const e=document.createElement(tag);Object.entries(props).forEach(([k,v])=>{if(k==='class')e.className=v;else if(k==='html')e.innerHTML=v;else e.setAttribute(k,v);});kids.flat().forEach(k=>{if(typeof k==='string')e.appendChild(document.createTextNode(k));else if(k)e.appendChild(k);});return e;}
+function clear(n){while(n.firstChild)n.removeChild(n.firstChild);}
 
-// ----- Pages -----
 function renderTracker(){
-  const root=document.getElementById('page-tracker'); clear(root);
-  const today=new Date();
-  const m=new Map(); planDays.forEach(d=>{ if(!m.has(d.week)) m.set(d.week, []); m.get(d.week).push(d); });
-  const weeks=[...m.entries()].map(([w,items])=>({week:w,items}));
-  let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week || weeks[0].week;
-
-  const tabs=el('div',{class:'tabs'});
-  weeks.forEach(w=>{ const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`); b.onclick=()=>{ activeWeek=w.week; draw(); }; tabs.appendChild(b); });
-  root.appendChild(tabs);
-  const container=el('div'); root.appendChild(container);
-
-  function draw(){
-    clear(container);
-    const w=weeks.find(x=>x.week===activeWeek);
-    const title=el('div',{class:'sub'}, `Week ${w.week} • Goal ${w.items[0].goal.toFixed(1)} kg`);
-    container.appendChild(title);
-
-    w.items.forEach(d=>{
-      const isToday = sameDay(d.date, today);
-      const li=el('div',{class:'row'+(isToday?' today':'')});
-      const head=el('div',{class:'datewrap'});
-      head.append(el('div',{}, d.dayName+' '+d.label));
-      if(isToday){ head.append(el('span',{class:'badge'},'TODAY')); }
-      li.append(head);
-      li.append(el('div',{}, '🏋️ ', d.desc));
-      const grid=el('div',{class:'grid'});
-      [['Burn', d.burn+' kcal'], ['Food', d.cal+' kcal'], ['Carbs', d.c+' g'], ['Fat', d.f+' g']].forEach(([t,v])=>{
-        grid.append(el('div',{class:'pill'}, el('div',{class:'t'}, t), el('div',{class:'v'}, v)));
-      });
-      li.append(grid);
-      const grid2=el('div',{class:'grid2'});
-      [['Protein', d.p+' g'], ['Goal', w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=>{
-        grid2.append(el('div',{class:'pill'}, el('div',{class:'t'}, t), el('div',{class:'v'}, v)));
-      });
-      container.appendChild(li);
-    });
-  }
-  draw();
+ const root=document.getElementById('page-tracker');clear(root);
+ const today=new Date();
+ const m=new Map();planDays.forEach(d=>{if(!m.has(d.week))m.set(d.week,[]);m.get(d.week).push(d);});
+ const weeks=[...m.entries()].map(([w,items])=>({week:w,items}));
+ let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week||weeks[0].week;
+ const tabs=el('div',{class:'tabs'});
+ weeks.forEach(w=>{const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`);b.onclick=()=>{activeWeek=w.week;draw();};tabs.appendChild(b);});
+ root.appendChild(tabs);
+ const container=el('div');root.appendChild(container);
+ function draw(){clear(container);const w=weeks.find(x=>x.week===activeWeek);
+   const title=el('div',{class:'sub'},`Week ${w.week} • Goal ${w.items[0].goal.toFixed(1)} kg`);container.appendChild(title);
+   w.items.forEach(d=>{const isToday=sameDay(d.date,today);const li=el('div',{class:'row'+(isToday?' today':'')});
+     const head=el('div',{class:'datewrap'});head.append(el('div',{},d.dayName+' '+d.label));if(isToday)head.append(el('span',{class:'badge'},'TODAY'));li.append(head);
+     li.append(el('div',{},'🏋️ ',d.desc));
+     const grid=el('div',{class:'grid'});[['Burn',d.burn+' kcal'],['Food',d.cal+' kcal'],['Carbs',d.c+' g'],['Fat',d.f+' g']].forEach(([t,v])=>{grid.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)));});li.append(grid);
+     const grid2=el('div',{class:'grid2'});[['Protein',d.p+' g'],['Goal',w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=>{grid2.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)));});li.append(grid2);
+     container.appendChild(li);});}
+ draw();
 }
-
-function renderTrain(){
-  const root=document.getElementById('page-train'); clear(root);
-  const entries = JSON.parse(localStorage.getItem(SK.LIFTS)||'[]');
-  const row=el('div',{class:'card'});
-  const sel=el('select',{id:'tl-ex'}); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x)));
-  const wt=el('input',{id:'tl-w',type:'number',placeholder:'kg'}), reps=el('input',{id:'tl-r',type:'number',placeholder:'reps'}), date=el('input',{id:'tl-d',type:'date',value: isoLocal(new Date())});
-  const add=el('button',{id:'tl-add',class:'btn',type:'button'},'Add');
-  row.append(el('div',{class:'grid3'}, sel, wt, reps), el('div',{}, date, ' ', add));
-  root.append(row);
-
-  const by=new Map(); entries.forEach(e=>{ if(!by.has(e.exercise)) by.set(e.exercise, []); by.get(e.exercise).push(e); });
-  ;[...by.keys()].sort().forEach(ex=>{
-    const sec=el('div',{class:'card'});
-    sec.append(el('div',{class:'sub',html:'<b>'+ex+'</b>'}));
-    const tbl=el('table',{style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th>Reps</th><th></th></tr></thead>';
-    const tb=el('tbody');
-    by.get(ex).sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{
-      const tr=el('tr');
-      tr.append(el('td',{}, r.date), el('td',{}, String(r.weight)), el('td',{}, String(r.reps)));
-      const del=el('button',{class:'btn danger',type:'button','data-action':'del-lift','data-id':r.id},'Delete');
-      tr.append(el('td',{}, del)); tb.append(tr);
-    });
-    tbl.append(tb); sec.append(tbl); root.append(sec);
-  });
-}
-
-function renderBW(){
-  const root=document.getElementById('page-bw'); clear(root);
-  const arr=JSON.parse(localStorage.getItem(SK.BW)||'[]');
-  const card=el('div',{class:'card'});
-  const wt=el('input',{id:'bw-w',type:'number',placeholder:'kg'}), date=el('input',{id:'bw-d',type:'date',value: isoLocal(new Date())});
-  const add=el('button',{id:'bw-add',class:'btn',type:'button'},'Add/Update');
-  card.append(el('div',{class:'grid3'}, wt, add, date));
-  root.append(card);
-
-  const tbl=el('table',{class:'card',style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th></th></tr></thead>';
-  const tb=el('tbody');
-  arr.forEach(r=>{
-    const tr=el('tr'); tr.append(el('td',{}, r.date), el('td',{}, String(r.weight)));
-    const del=el('button',{class:'btn danger',type:'button','data-action':'del-bw','data-date':r.date},'Delete');
-    tr.append(el('td',{}, del)); tb.append(tr);
-  });
-  tbl.append(tb); root.append(tbl);
-}
-
-// Event delegation
-if(!window.__delegated){
-  document.addEventListener('click', (e)=>{
-    const t=e.target; if(!(t instanceof Element)) return;
-    if(t.id==='tl-add'){
-      const ex=(document.getElementById('tl-ex')||{}).value || "Bench Press";
-      const w =Number((document.getElementById('tl-w')||{}).value || 0);
-      const r =Number((document.getElementById('tl-r')||{}).value || 0);
-      const d =(document.getElementById('tl-d')||{}).value || isoLocal(new Date());
-      const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push({id:crypto.randomUUID(), date:d, exercise:ex, weight:w, reps:r});
-      localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return;
-    }
-    if(t.dataset && t.dataset.action==='del-lift'){
-      const id=t.dataset.id; const arr=(JSON.parse(localStorage.getItem(SK.LIFTS)||'[]')).filter(x=>x.id!==id);
-      localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return;
-    }
-    if(t.id==='bw-add'){
-      const vdate=(document.getElementById('bw-d')||{}).value || ''; const vwt=Number((document.getElementById('bw-w')||{}).value || 0);
-      if(!vdate){ alert('Pick a date'); return; }
-      const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==vdate); a.push({date:vdate, weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date));
-      localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return;
-    }
-    if(t.dataset && t.dataset.action==='del-bw'){
-      const d=t.dataset.date; const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==d);
-      localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return;
-    }
-  });
-  window.__delegated=true;
-}
-
-// Charts
-function epley1RM(w,r){ return w*(1+r/30); }
-function renderTrends(){
-  const root=document.getElementById('page-trends'); clear(root);
-  const entries=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]');
-  const sel=el('select'); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x)));
-  root.append(el('div',{}, sel));
-  const can=el('canvas'); can.height=320; root.append(el('div',{class:'card'}, can));
-  let chart; function draw(){ const arr=entries.filter(e=>e.exercise===sel.value).sort((a,b)=>a.date.localeCompare(b.date));
-    const labels=arr.map(e=>e.date), values=arr.map(e=>Math.round(epley1RM(e.weight||0,e.reps||1)*10)/10);
-    if(chart) chart.destroy(); chart=new Chart(can.getContext('2d'), {type:'line',data:{labels,datasets:[{label:'Est. 1RM (kg)',data:values,borderColor:'#0b5fff',tension:0.2,pointRadius:2}]},options:{maintainAspectRatio:false}}); }
-  sel.addEventListener('change', draw); draw();
-}
-function renderProj(){
-  const root=document.getElementById('page-proj'); clear(root);
-  const anchors=[]; for(let w=1; w<=7; w++){ const wk=planDays.filter(x=>x.week===w); if(wk.length){ anchors.push({ts:+wk[0].date, weight:wk[0].goal}); } } const last=planDays[planDays.length-1]; anchors.push({ts:+last.date, weight:last.goal});
-  const bw=JSON.parse(localStorage.getItem(SK.BW)||'[]'); const bwMap=new Map(bw.map(x=>[x.date,x.weight]));
-  const proj=planDays.map(d=>{ const t=+d.date; let prev=anchors[0], next=anchors[anchors.length-1]; for(let i=0;i<anchors.length-1;i++){ if(t>=anchors[i].ts && t<=anchors[i+1].ts){ prev=anchors[i]; next=anchors[i+1]; break; } } const span=Math.max(1,next.ts-prev.ts); const a=Math.min(1,Math.max(0,(t-prev.ts)/span)); const projected=+(prev.weight+(next.weight-prev.weight)*a).toFixed(1); return {date: isoLocal(d.date), projected}; });
-  const labels=proj.map(p=>p.date), projected=proj.map(p=>p.projected), realized=labels.map(d=>bwMap.get(d) ?? null);
-  const can=el('canvas'); can.height=320; const card=el('div',{class:'card'}, can); root.append(card);
-  new Chart(can.getContext('2d'), {type:'line', data:{labels, datasets:[{label:'Projected (kg)', data: projected, borderColor:'#0b5fff', tension:0.2, pointRadius:0},{label:'Realized (kg)', data: realized, borderColor:'#16a34a', tension:0.2, pointRadius:3}]}, options:{maintainAspectRatio:false}});
-}
-
-// Router
-function showPage(id){
-  window.__page=id;
-  const ids=['tracker','train','bw','trends','proj'];
-  ids.forEach(n=> document.getElementById('page-'+n).style.display=(n===id)?'block':'none');
-  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ids[i]===id));
-  if(id==='tracker') renderTracker();
-  if(id==='train') renderTrain();
-  if(id==='bw') renderBW();
-  if(id==='trends') renderTrends();
-  if(id==='proj') renderProj();
-}
-document.getElementById('tab-tracker').addEventListener('click', ()=>showPage('tracker'));
-document.getElementById('tab-train').addEventListener('click', ()=>showPage('train'));
-document.getElementById('tab-bw').addEventListener('click', ()=>showPage('bw'));
-document.getElementById('tab-trends').addEventListener('click', ()=>showPage('trends'));
-document.getElementById('tab-proj').addEventListener('click', ()=>showPage('proj'));
-showPage('tracker');
-
-// PWA
-if('serviceWorker' in navigator){ window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }
+renderTracker();
 </script>
 </body>
 </html>
