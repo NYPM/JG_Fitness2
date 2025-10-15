@@ -1,23 +1,22 @@
 <!doctype html>
-<html lang="en">
+<html lang=\"en\">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset=\"utf-8\">
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3.2">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.2">
-<meta name="theme-color" content="#0b5fff">
+<link rel=\"manifest\" href=\"manifest.webmanifest?v=3.4\">
+<link rel=\"apple-touch-icon\" href=\"icons/icon-192.svg?v=3.4\">
+<meta name=\"theme-color\" content=\"#0b5fff\">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ok:#0a7b34;--ring:#3b82f6;}
   body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   .wrap{max-width:820px;margin:0 auto;padding:12px}
   h1{font-size:20px;margin:10px 0 6px 0}
-  .sub{color:var(--muted);font-size:12px;margin-bottom:8px}
+  .sub{color:#666;font-size:12px;margin-bottom:8px}
   .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:8px}
   .tab{border:1px solid #ccc;border-radius:999px;padding:6px 10px;background:#fff;white-space:nowrap;cursor:pointer}
   .tab.active{background:#000;color:#fff;border-color:#000}
-  .row{background:var(--card);border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
-  .row.today{outline:2px solid var(--ring)}
+  .row{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
   .pill{background:#f3f4f6;border-radius:10px;padding:6px;text-align:center}
   .pill .t{font-weight:600;font-size:12px}
@@ -27,317 +26,115 @@
   .btn{font-size:12px;border:1px solid #ddd;border-radius:8px;padding:6px 10px;background:#f3f4f6;cursor:pointer}
   .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:10px}
   .grid3{display:grid;grid-template-columns:1fr 90px 140px;gap:8px}
-  .toast{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:6px 10px;display:none;margin-top:8px}
-  .warn{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:8px;padding:6px 10px;margin:8px 0;display:none}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>
 </head>
 <body>
-<div class="wrap">
+<div class=\"wrap\">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3.2 • Multi-page • Offline-ready</div>
-    <div id="warn" class="warn">Persistent storage unavailable. Data will be temporary.</div>
+    <div class=\"sub\">v3.4 • Workout rotation + travel block • Offline-ready</div>
   </header>
-
-  <nav class="tabs">
-    <button class="tab active" id="tab-tracker">Tracker</button>
-    <button class="tab" id="tab-train">Training Log</button>
-    <button class="tab" id="tab-bw">Body Weight</button>
-    <button class="tab" id="tab-trends">Lift Trends</button>
-    <button class="tab" id="tab-proj">Weight Projection</button>
+  <nav class=\"tabs\">
+    <button class=\"tab active\" id=\"tab-tracker\">Tracker</button>
+    <button class=\"tab\" id=\"tab-train\">Training Log</button>
+    <button class=\"tab\" id=\"tab-bw\">Body Weight</button>
+    <button class=\"tab\" id=\"tab-trends\">Lift Trends</button>
+    <button class=\"tab\" id=\"tab-proj\">Weight Projection</button>
   </nav>
-
   <main>
-    <section id="page-tracker"></section>
-    <section id="page-train" style="display:none"></section>
-    <section id="page-bw" style="display:none"></section>
-    <section id="page-trends" style="display:none"></section>
-    <section id="page-proj" style="display:none"></section>
+    <section id=\"page-tracker\"></section>
+    <section id=\"page-train\" style=\"display:none\"></section>
+    <section id=\"page-bw\" style=\"display:none\"></section>
+    <section id=\"page-trends\" style=\"display:none\"></section>
+    <section id=\"page-proj\" style=\"display:none\"></section>
   </main>
 </div>
-
 <script>
-// ----- Storage helpers -----
-function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), da=String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
-function storageAvailable(){ try{ const x='__t__'; localStorage.setItem(x,'1'); localStorage.removeItem(x); return true; } catch(e){ return false; } }
-const HAS_LS = storageAvailable();
-if(!HAS_LS){ document.getElementById('warn').style.display='block'; }
-const MEM = { 'flt-lifts': [], 'flt-bw': [] };
-const LS = {
-  get(k){ if(HAS_LS){ try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch{return[]} } return MEM[k]||[]; },
-  set(k,v){ if(HAS_LS){ localStorage.setItem(k, JSON.stringify(v)); } MEM[k]=v; }
-};
-
-// ----- Core plan -----
-const START = new Date('2025-10-12T00:00:00');
-const END   = new Date('2025-12-01T00:00:00');
-const GOAL  = [75.8,74.6,73.2,71.8,70.3,68.8,67.0];
-const PHASES = [
-  { weeks:[1,2], cal:1950, p:175, c:160, f:60, burn:{strength:375, cardio:300, hiit:250, rest:150} },
-  { weeks:[3,4,5], cal:1800, p:175, c:130, f:55, burn:{strength:425, cardio:350, hiit:300, rest:150} },
-  { weeks:[6,7], cal:1950, p:175, c:150, f:60, burn:{strength:325, cardio:275, hiit:250, rest:150} },
-];
-const EXERCISES = ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"];
-const SK = { LIFTS:'flt-lifts', BW:'flt-bw' };
-
-function phaseForWeek(w){ return PHASES.find(ph=>ph.weeks.includes(w)) || PHASES[PHASES.length-1]; }
+function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=('0'+(dt.getMonth()+1)).slice(-2), da=('0'+dt.getDate()).slice(-2); return y+'-'+m+'-'+da; }
+const START=new Date('2025-10-12T00:00:00'), END=new Date('2025-12-01T00:00:00');
+const GOAL=[75.8,74.6,73.2,71.8,70.3,68.8,67.0];
+const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250,rest:150}},
+          {w:[3,4,5],cal:1800,p:175,c:130,f:55,b:{strength:425,cardio:350,hiit:300,rest:150}},
+          {w:[6,7],cal:1950,p:175,c:150,f:60,b:{strength:325,cardio:275,hiit:250,rest:150}}];
+function phase(w){ return PH.find(x=>x.w.includes(w))||PH[PH.length-1]; }
 function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-function dn(d){ return d.toLocaleDateString('en-US',{weekday:'short'}); }
 function lab(d){ return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'}); }
-function sameDay(a,b){ return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
 function isCheat(d){ const k=Math.floor((d-START)/86400000); return k>=0 && k%10===6; }
-
+const T_FROM=new Date('2025-10-16T00:00:00'), T_TO=new Date('2025-10-20T23:59:59');
+function isTravel(d){ return d>=T_FROM && d<=T_TO; }
+function wo(week, jsDay, d){
+  if(isTravel(d)){ if(jsDay===0) return "Travel — Active Recovery: 30–40 min walk + mobility";
+    return "Travel — Skipping 10x(30s/15s); Push-Ups 3x15–20; Squats 3x20; Plank 3x60s; (opt) Burpees 2x10"; }
+  const b = week<=2?1:(week<=4?2:3);
+  if(jsDay===1){ if(b===1) return "Push: Bench Press; Incline DB Press; Overhead Press; Cable Fly; Triceps Pushdown";
+                 if(b===2) return "Push: DB Bench Press; Arnold Press; Pec Deck; Lateral Raise; Overhead Rope Extension";
+                 return "Push: Close-Grip Bench; Seated DB Shoulder Press; Machine Fly; Lateral Raise; Skull Crushers"; }
+  if(jsDay===2){ if(b===1) return "Pull: Deadlift; Lat Pulldown; Seated Row; Face Pull; DB Curl";
+                 if(b===2) return "Pull: Rack Pull; Chin-Up; T-Bar Row; Rear Delt Fly; Hammer Curl";
+                 return "Pull: Deadlift; DB Pullover; One-Arm Row; Face Pull; Cable Curl"; }
+  if(jsDay===3){ if(b===1) return "Legs: Back Squat; Romanian Deadlift; Leg Press; Walking Lunge; Calf Raise";
+                 if(b===2) return "Legs: Front Squat; Hip Thrust; Hack Squat; Step-Up; Calf Raise";
+                 return "Legs: Bulgarian Split Squat; Stiff-Leg Deadlift; Leg Extension; Leg Curl; Calf Raise"; }
+  if(jsDay===4){ return "Cardio: Zone 2 30–40 min + 10 min mobility"; }
+  if(jsDay===5){ if(b===1) return "Upper Power: Bench 5x5; Barbell Row 5x5; Pull-Ups AMRAP; Dips 3x10; Hanging Leg Raise";
+                 if(b===2) return "Upper Power: Incline Bench 5x5; Weighted Chin-Up 5x5; DB Row 3x10; Close-Grip Push-Up 3x15; Cable Crunch";
+                 return "Upper Power: Flat DB Press 5x5; Pendlay Row 5x5; Pull-Up AMRAP; Dips 3x12; Ab Wheel Rollout"; }
+  if(jsDay===6){ return "Cardio: Zone 2 30–40 min (or Skipping Intervals)"; }
+  return "Rest / Active Recovery (Walk + Stretch)";
+}
 function buildPlan(){
-  const days=[]; let d=new Date(START), week=1;
-  while(d<=END){
-    if(d.getDay()===1 && days.length) week++;
-    const ph = phaseForWeek(week);
-    let desc, type;
-    switch(d.getDay()){
-      case 1: desc="Push: Bench 4x8; Incline DB Press 3x10; Overhead Press 3x8; Cable Fly 3x15; Lateral Raise 3x15; Triceps Pushdown 3x12"; type="strength"; break;
-      case 2: desc="Pull: Deadlift 4x6; Lat Pulldown 3x10; Seated Row 3x10; Face Pull 3x15; DB Curl 3x10; Hammer Curl 3x10"; type="strength"; break;
-      case 3: desc="Legs: Back Squat 4x8; Romanian Deadlift 3x10; Leg Press 3x12; Walking Lunge 3x12; Calf Raise 4x15"; type="strength"; break;
-      case 4: desc="Cardio 40 min Zone 2; Mobility"; type="cardio"; break;
-      case 5: desc="Upper Power: Bench 5x5; Barbell Row 5x5; Pull-ups AMRAP; Dips 3x10; Core 3x15"; type="strength"; break;
-      case 6: desc="Cardio 30-40 min Zone 2 or Cheat Day (3000 kcal)"; type="cardio"; break;
-      default: desc="Rest / Active Recovery (Walk or Stretch)"; type="rest";
-    }
-    let cal=ph.cal, p=ph.p, c=ph.c, f=ph.f;
-    if(week===1 && [4,5,6,0].includes(d.getDay())){
-      if(d.getDay()===0){ desc="Cheat Day / Rest (Social)"; type="rest"; cal=3000; }
-      else { desc="Skipping HIIT 20 min; Push-ups 4x20; Bodyweight Squats 4x20; Plank 3x60s"; type="hiit"; }
-    }
-    if(isCheat(d)){ cal=3000; type='rest'; }
-    const burn=ph.burn[type];
-    days.push({date:new Date(d), week, dayName:dn(d), label:lab(d), desc, type, cal, p, c, f, burn, goal: GOAL[Math.min(week-1,GOAL.length-1)]});
+  const out=[]; let d=new Date(START), w=1;
+  while(d<=END){ if(d.getDay()===1 && out.length) w++; const ph=phase(w);
+    const desc=wo(w,d.getDay(),d);
+    let type = desc.startsWith("Cardio")?"cardio":(desc.startsWith("Upper Power")||desc.startsWith("Push")||desc.startsWith("Pull")||desc.startsWith("Legs")?"strength":(desc.startsWith("Travel")?(desc.includes("Skipping")?"hiit":"rest"):"rest"));
+    let cal=ph.cal, p=ph.p, c=ph.c, f=ph.f; if(isCheat(d)){ cal=3000; type='rest'; }
+    const burn=ph.b[type]||ph.b.rest;
+    out.push({date:new Date(d), week:w, dayName:d.toLocaleDateString('en-US',{weekday:'short'}), label:lab(d), desc, type, cal, p, c, f, burn, goal: GOAL[Math.min(w-1,GOAL.length-1)]});
     d=addDays(d,1);
-  }
-  return days;
+  } return out;
 }
-const planDays = buildPlan();
+const planDays=buildPlan();
 
-function el(tag, props={}, ...kids){
-  const e = document.createElement(tag);
-  Object.entries(props).forEach(([k,v])=>{
-    if(k==='class') e.className=v; else if(k==='html') e.innerHTML=v; else e.setAttribute(k,v);
-  });
-  kids.flat().forEach(k=>{ if(typeof k==='string') e.appendChild(document.createTextNode(k)); else if(k) e.appendChild(k); });
-  return e;
-}
-function clear(node){ while(node.firstChild) node.removeChild(node.firstChild); }
+function el(tag, props={}, ...kids){ const e=document.createElement(tag); Object.entries(props).forEach(([k,v])=>{ if(k==='class') e.className=v; else if(k==='html') e.innerHTML=v; else e.setAttribute(k,v); }); kids.flat().forEach(k=>{ if(typeof k==='string') e.appendChild(document.createTextNode(k)); else if(k) e.appendChild(k); }); return e; }
+function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
 
 function renderTracker(){
-  const root = document.getElementById('page-tracker'); clear(root);
-  const today = new Date();
-  const map = new Map(); planDays.forEach(d=>{ if(!map.has(d.week)) map.set(d.week, []); map.get(d.week).push(d); });
-  const weeks = Array.from(map.entries()).map(([w,items])=>({week:w,items}));
-  let activeWeek = weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week || weeks[0].week;
-
-  const tabs = el('div',{class:'tabs'});
-  weeks.forEach(w=>{
-    const b = el('button',{class:'tab'+(w.week===activeWeek?' active':'' )}, `Week ${w.week}`);
-    b.onclick = ()=>{ activeWeek=w.week; draw(); };
-    tabs.appendChild(b);
-  });
-  root.appendChild(tabs);
-
-  const container = el('div'); root.appendChild(container);
-
-  function draw(){
-    clear(container);
-    const w = weeks.find(x=>x.week===activeWeek);
-    const totalIn = w.items.reduce((s,d)=>s+d.cal,0);
-    const totalOut = w.items.reduce((s,d)=>s+d.burn,0);
-    const title = el('div',{class:'sub'}, `Week ${w.week} • Goal `, el('span',{class:'goal'}, `${w.items[0].goal.toFixed(1)} kg`));
-    container.appendChild(title);
-
-    w.items.forEach(d=>{
-      const li = el('div',{class:'row'+(sameDay(d.date,today)?' today':'')});
-      li.append(el('div',{}, d.dayName+' '+d.label));
-      li.append(el('div',{}, '🏋️ '+d.desc));
-      const grid = el('div',{class:'grid'});
-      [['Burn', d.burn+' kcal'], ['Food', d.cal+' kcal'], ['Carbs', d.c+' g'], ['Fat', d.f+' g']].forEach(([t,v])=>{
-        grid.append(el('div',{class:'pill'}, el('div',{class:'t'},t), el('div',{class:'v'},v)));
-      });
-      li.append(grid);
-      const grid2 = el('div',{class:'grid2'});
-      [['Protein', d.p+' g'], ['Goal', w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=>{
-        grid2.append(el('div',{class:'pill'}, el('div',{class:'t'},t), el('div',{class:'v'},v)));
-      });
-      li.append(grid2);
-      if(isCheat(d.date)){ li.append(el('div',{}, '⚡ Cheat day scheduled')); }
-      container.appendChild(li);
-    });
-  }
+  const root=document.getElementById('page-tracker'); clear(root);
+  const m=new Map(); planDays.forEach(d=>{ if(!m.has(d.week)) m.set(d.week,[]); m.get(d.week).push(d); });
+  const weeks=[...m.entries()].map(([w,items])=>({week:w,items}));
+  let activeWeek=weeks[0].week;
+  const tabs=el('div',{class:'tabs'}); weeks.forEach(w=>{ const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`); b.onclick=()=>{activeWeek=w.week; draw();}; tabs.appendChild(b); }); root.appendChild(tabs);
+  const container=el('div'); root.appendChild(container);
+  function draw(){ clear(container); const w=weeks.find(x=>x.week===activeWeek); const title=el('div',{class:'sub'},`Week ${w.week} • Goal `,el('span',{class:'goal'},`${w.items[0].goal.toFixed(1)} kg`)); container.appendChild(title);
+    w.items.forEach(d=>{ const li=el('div',{class:'row'}); li.append(el('div',{}, d.dayName+' '+d.label)); li.append(el('div',{}, '🏋️ '+d.desc));
+      const grid=el('div',{class:'grid'}); [['Burn', d.burn+' kcal'],['Food', d.cal+' kcal'],['Carbs', d.c+' g'],['Fat', d.f+' g']].forEach(([t,v])=> grid.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)))); li.append(grid);
+      const grid2=el('div',{class:'grid2'}); [['Protein', d.p+' g'],['Goal', w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=> grid2.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)))); li.append(grid2); container.appendChild(li); }); }
   draw();
 }
 
-function renderTrain(){
-  const root = document.getElementById('page-train'); clear(root);
-  const entries = LS.get(SK.LIFTS);
-  const row = el('div',{class:'card'});
-  const sel = el('select',{id:'tl-ex'}); EXERCISES.forEach(x=> sel.append(el('option',{value:x},x)));
-  const wt  = el('input',{id:'tl-w', type:'number', placeholder:'kg'});
-  const reps= el('input',{id:'tl-r', type:'number', placeholder:'reps'});
-  const date= el('input',{id:'tl-d', type:'date', value: isoLocal(new Date())});
-  const add = el('button',{id:'tl-add', class:'btn'}, 'Add');
-  const toast = el('div',{id:'tl-toast', class:'toast'}, 'Saved');
-  const grid = el('div',{class:'grid3'}, sel, wt, reps);
-  row.append(grid, el('div',{}, date, ' ', add), toast);
-  root.append(row);
-
-  document.getElementById('tl-add').addEventListener('click', ()=>{
-    const rec = { id: crypto.randomUUID(), date: date.value, exercise: sel.value, weight: Number(wt.value||0), reps: Number(reps.value||0) };
-    const arr = LS.get(SK.LIFTS); arr.push(rec); LS.set(SK.LIFTS, arr);
-    document.getElementById('tl-toast').style.display='inline-block';
-    setTimeout(()=>document.getElementById('tl-toast').style.display='none', 1200);
-    renderTrain();
-  });
-
-  const by = new Map(); entries.forEach(e=>{ if(!by.has(e.exercise)) by.set(e.exercise, []); by.get(e.exercise).push(e); });
-  [...by.keys()].sort().forEach(ex=>{
-    const sec = el('div',{class:'card'});
-    sec.append(el('div',{class:'sub', html:'<b>'+ex+'</b>'}));
-    const tbl = el('table',{style:'width:100%'});
-    tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th>Reps</th><th></th></tr></thead>';
-    const tb = el('tbody');
-    by.get(ex).sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{
-      const tr = el('tr'); tr.append(el('td',{}, r.date), el('td',{}, String(r.weight)), el('td',{}, String(r.reps)));
-      const del = el('button',{class:'btn', onclick:()=>{ const arr=LS.get(SK.LIFTS).filter(x=>x.id!==r.id); LS.set(SK.LIFTS, arr); renderTrain(); }}, 'Delete');
-      tr.append(el('td',{}, del)); tb.append(tr);
-    });
-    tbl.append(tb); sec.append(tbl); root.append(sec);
-  });
+const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
+function renderTrain(){ const root=document.getElementById('page-train'); clear(root);
+  const entries = JSON.parse(localStorage.getItem(SK.LIFTS)||'[]');
+  const row = el('div',{class:'card'}); const sel=el('select',{id:'tl-ex'}); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x)));
+  const w=el('input',{id:'tl-w',type:'number',placeholder:'kg'}), r=el('input',{id:'tl-r',type:'number',placeholder:'reps'}), d=el('input',{id:'tl-d',type:'date',value: isoLocal(new Date())});
+  const add=el('button',{id:'tl-add',class:'btn',type:'button'},'Add'); row.append(el('div',{class:'grid3'}, sel,w,r), el('div',{}, d,' ',add)); root.append(row);
+  const by=new Map(); entries.forEach(e=>{ if(!by.has(e.exercise)) by.set(e.exercise,[]); by.get(e.exercise).push(e); });
+  ;[...by.keys()].sort().forEach(ex=>{ const sec=el('div',{class:'card'}); sec.append(el('div',{class:'sub',html:'<b>'+ex+'</b>'})); const tbl=el('table',{style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th>Reps</th></tr></thead>'; const tb=el('tbody');
+    by.get(ex).sort((a,b)=>a.date.localeCompare(b.date)).forEach(rw=>{ const tr=el('tr'); tr.append(el('td',{},rw.date), el('td',{},String(rw.weight)), el('td',{},String(rw.reps))); tb.append(tr); }); tbl.append(tb); sec.append(tbl); root.append(sec); });
+  document.getElementById('tl-add').addEventListener('click', ()=>{ const rec={id:crypto.randomUUID(), date:d.value, exercise:sel.value, weight:Number(w.value||0), reps:Number(r.value||0)}; const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push(rec); localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); });
 }
-
-function renderBW(){
-  const root = document.getElementById('page-bw'); clear(root);
-  const arr = LS.get(SK.BW);
-  const card = el('div',{class:'card'});
-  const wt  = el('input',{id:'bw-w', type:'number', placeholder:'kg'});
-  const date= el('input',{id:'bw-d', type:'date', value: isoLocal(new Date())});
-  const add = el('button',{id:'bw-add', class:'btn'}, 'Add/Update');
-  const toast = el('div',{id:'bw-toast', class:'toast'}, 'Saved');
-  const grid = el('div',{class:'grid3'}, wt, add, date);
-  card.append(grid, toast);
-  root.append(card);
-
-  document.getElementById('bw-add').addEventListener('click', ()=>{
-    try {
-      const vdate = document.getElementById('bw-d').value;
-      const vwt   = Number(document.getElementById('bw-w').value || 0);
-      const arr = LS.get(SK.BW).filter(x=>x.date!==vdate);
-      arr.push({date: vdate, weight: vwt});
-      arr.sort((a,b)=>a.date.localeCompare(b.date));
-      LS.set(SK.BW, arr);
-      document.getElementById('bw-toast').style.display='inline-block';
-      setTimeout(()=>document.getElementById('bw-toast').style.display='none', 1200);
-      renderBW(); if(window.__page==='proj') renderProj();
-    } catch (e) {
-      alert('Save failed: '+e.message);
-    }
-  });
-
-  const tbl = el('table',{class:'card', style:'width:100%'});
-  tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th></th></tr></thead>';
-  const tb = el('tbody');
-  arr.forEach(r=>{
-    const tr = el('tr'); tr.append(el('td',{},r.date), el('td',{}, String(r.weight)));
-    const del = el('button',{class:'btn', onclick:()=>{ const x=LS.get(SK.BW).filter(y=>y.date!==r.date); LS.set(SK.BW,x); renderBW(); if(window.__page==="proj") renderProj(); }}, 'Delete');
-    tr.append(el('td',{}, del)); tb.append(tr);
-  });
-  tbl.append(tb); root.append(tbl);
+function renderBW(){ const root=document.getElementById('page-bw'); clear(root);
+  const arr=JSON.parse(localStorage.getItem(SK.BW)||'[]');
+  const card=el('div',{class:'card'}); const wt=el('input',{id:'bw-w',type:'number',placeholder:'kg'}), d=el('input',{id:'bw-d',type:'date',value: isoLocal(new Date())}); const add=el('button',{id:'bw-add',class:'btn',type:'button'},'Add/Update'); card.append(el('div',{class:'grid3'}, wt, add, d)); root.append(card);
+  const tbl=el('table',{class:'card',style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th></tr></thead>'; const tb=el('tbody'); arr.forEach(r=>{ const tr=el('tr'); tr.append(el('td',{},r.date), el('td',{},String(r.weight))); tb.append(tr); }); tbl.append(tb); root.append(tbl);
+  document.getElementById('bw-add').addEventListener('click', ()=>{ const vdate=d.value, vwt=Number(wt.value||0); const a=JSON.parse(localStorage.getItem(SK.BW)||'[]').filter(x=>x.date!==vdate); a.push({date:vdate,weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date)); localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); });
 }
-
 function epley1RM(w,r){ return w*(1+r/30); }
-
-function renderTrends(){
-  const root = document.getElementById('page-trends'); clear(root);
-  const entries = LS.get(SK.LIFTS);
-  const sel = el('select',{id:'tr-ex'}); EXERCISES.forEach(x=> sel.append(el('option',{value:x},x)));
-  root.append(el('div',{}, sel));
-  const can = el('canvas',{id:'tr-can'}); can.height=320; root.append(el('div',{class:'card'}, can));
-  let chart;
-  function draw(){
-    const arr = entries.filter(e=>e.exercise===sel.value).sort((a,b)=>a.date.localeCompare(b.date));
-    const labels = arr.map(e=>e.date);
-    const values = arr.map(e=> Math.round(epley1RM(e.weight||0, e.reps||1)*10)/10 );
-    if(chart) chart.destroy();
-    chart = new Chart(can.getContext('2d'), {
-      type:'line',
-      data:{ labels, datasets:[{label:'Est. 1RM (kg)', data: values, borderColor:'#0b5fff', tension:0.2, pointRadius:2}] },
-      options:{ maintainAspectRatio:false }
-    });
-  }
-  sel.addEventListener('change', draw); draw();
-}
-
-function renderProj(){
-  const root = document.getElementById('page-proj'); clear(root);
-  const anchors = [];
-  for (let w = 1; w <= 7; w++) {
-    const wkDays = planDays.filter(x => x.week === w);
-    if (wkDays.length) {
-      anchors.push({ date: isoLocal(wkDays[0].date), ts: +new Date(wkDays[0].date), weight: wkDays[0].goal });
-    }
-  }
-  const lastWeekDays = planDays.filter(x => x.week === 7);
-  if (lastWeekDays.length) {
-    const last = lastWeekDays[lastWeekDays.length - 1];
-    anchors.push({ date: isoLocal(last.date), ts: +new Date(last.date), weight: last.goal });
-  }
-  const bw = LS.get(SK.BW); const bwMap = new Map(bw.map(x => [x.date, x.weight]));
-  const proj = planDays.map(d => {
-    const dLocal = isoLocal(d.date);
-    const t = +new Date(d.date);
-    let prev = anchors[0], next = anchors[anchors.length - 1];
-    for (let i = 0; i < anchors.length - 1; i++) {
-      if (t >= anchors[i].ts && t <= anchors[i+1].ts) { prev = anchors[i]; next = anchors[i+1]; break; }
-      if (t < anchors[0].ts) { prev = anchors[0]; next = anchors[1]; break; }
-      if (t > anchors[anchors.length-2].ts) { prev = anchors[anchors.length-2]; next = anchors[anchors.length-1]; break; }
-    }
-    const span = Math.max(1, next.ts - prev.ts);
-    const alpha = Math.min(1, Math.max(0, (t - prev.ts) / span));
-    const projected = +(prev.weight + (next.weight - prev.weight) * alpha).toFixed(1);
-    return { date: dLocal, projected };
-  });
-  const labels   = proj.map(p => p.date);
-  const projected= proj.map(p => p.projected);
-  const realized = labels.map(d => bwMap.get(d) ?? null);
-  const can = el('canvas'); can.height = 320;
-  const card = el('div', { class: 'card' }, can);
-  root.append(card);
-  new Chart(can.getContext('2d'), {
-    type: 'line',
-    data: { labels, datasets: [
-      { label: 'Projected (kg)', data: projected, borderColor: '#0b5fff', tension: 0.2, pointRadius: 0 },
-      { label: 'Realized (kg)',  data: realized,  borderColor: '#16a34a', tension: 0.2, pointRadius: 3 }
-    ]},
-    options: { maintainAspectRatio: false }
-  });
-}
-
-// Router
-function showPage(id){
-  window.__page = id;
-  const ids=['tracker','train','bw','trends','proj'];
-  ids.forEach(n=> document.getElementById('page-'+n).style.display = (n===id)?'block':'none');
-  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ids[i]===id));
-  if(id==='tracker') renderTracker();
-  if(id==='train') renderTrain();
-  if(id==='bw') renderBW();
-  if(id==='trends') renderTrends();
-  if(id==='proj') renderProj();
-}
-document.getElementById('tab-tracker').addEventListener('click', ()=>showPage('tracker'));
-document.getElementById('tab-train').addEventListener('click', ()=>showPage('train'));
-document.getElementById('tab-bw').addEventListener('click', ()=>showPage('bw'));
-document.getElementById('tab-trends').addEventListener('click', ()=>showPage('trends'));
-document.getElementById('tab-proj').addEventListener('click', ()=>showPage('proj'));
-showPage('tracker');
-
-// PWA
+function renderTrends(){ const root=document.getElementById('page-trends'); clear(root); const entries=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); const sel=el('select'); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x))); root.append(el('div',{},sel)); const can=el('canvas'); can.height=320; root.append(el('div',{class:'card'},can)); let chart; function draw(){ const arr=entries.filter(e=>e.exercise===sel.value).sort((a,b)=>a.date.localeCompare(b.date)); const labels=arr.map(e=>e.date); const values=arr.map(e=>Math.round(epley1RM(e.weight||0, e.reps||1)*10)/10); if(chart) chart.destroy(); chart=new Chart(can.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Est. 1RM (kg)',data:values,borderColor:'#0b5fff',tension:0.2,pointRadius:2}]},options:{maintainAspectRatio:false}});} sel.addEventListener('change',draw); draw(); }
+function renderProj(){ const root=document.getElementById('page-proj'); clear(root); const anchors=[]; for(let w=1; w<=7; w++){ const wk=planDays.filter(x=>x.week===w); if(wk.length){ anchors.push({ts:+wk[0].date, weight:wk[0].goal}); } } const last=planDays[planDays.length-1]; anchors.push({ts:+last.date, weight:last.goal}); const bw=JSON.parse(localStorage.getItem(SK.BW)||'[]'); const bwMap=new Map(bw.map(x=>[x.date,x.weight])); const proj=planDays.map(d=>{ const t=+d.date; let prev=anchors[0], next=anchors[anchors.length-1]; for(let i=0;i<anchors.length-1;i++){ if(t>=anchors[i].ts && t<=anchors[i+1].ts){ prev=anchors[i]; next=anchors[i+1]; break; } } const span=Math.max(1,next.ts-prev.ts); const a=Math.min(1,Math.max(0,(t-prev.ts)/span)); const projected=+(prev.weight+(next.weight-prev.weight)*a).toFixed(1); return {date: isoLocal(d.date), projected}; }); const labels=proj.map(p=>p.date), projected=proj.map(p=>p.projected), realized=labels.map(d=>bwMap.get(d) ?? null); const can=el('canvas'); can.height=320; const card=el('div',{class:'card'},can); root.append(card); new Chart(can.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Projected (kg)',data:projected,borderColor:'#0b5fff',tension:0.2,pointRadius:0},{label:'Realized (kg)',data:realized,borderColor:'#16a34a',tension:0.2,pointRadius:3}]},options:{maintainAspectRatio:false}}); }
+function showPage(id){ window.__page=id; const ids=['tracker','train','bw','trends','proj']; ids.forEach(n=> document.getElementById('page-'+n).style.display=(n===id)?'block':'none'); document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ids[i]===id)); if(id==='tracker') renderTracker(); if(id==='train') renderTrain(); if(id==='bw') renderBW(); if(id==='trends') renderTrends(); if(id==='proj') renderProj(); }
+document.getElementById('tab-tracker').addEventListener('click',()=>showPage('tracker')); document.getElementById('tab-train').addEventListener('click',()=>showPage('train')); document.getElementById('tab-bw').addEventListener('click',()=>showPage('bw')); document.getElementById('tab-trends').addEventListener('click',()=>showPage('trends')); document.getElementById('tab-proj').addEventListener('click',()=>showPage('proj')); showPage('tracker');
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }
 </script>
 </body>
