@@ -1,11 +1,10 @@
-
-const CACHE = 'fatloss-app-v3-1';
+const CACHE = 'fatloss-app-v3-2';
 const ASSETS = [
   './',
-  './index.html?v=3.1',
-  './manifest.webmanifest?v=3.1',
-  './icons/icon-192.svg?v=3.1',
-  './icons/icon-512.svg?v=3.1',
+  './index.html?v=3.2',
+  './manifest.webmanifest?v=3.2',
+  './icons/icon-192.svg?v=3.2',
+  './icons/icon-512.svg?v=3.2',
   'https://cdn.jsdelivr.net/npm/chart.js'
 ];
 self.addEventListener('install', e => {
