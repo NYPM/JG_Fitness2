@@ -4,17 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3.8">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.8">
+<link rel="manifest" href="manifest.webmanifest?v=3.9">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.9">
 <meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ok:#0a7b34;--ring:#3b82f6;}
+  html,body{height:100%;-webkit-overflow-scrolling:touch}
   body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   .wrap{max-width:820px;margin:0 auto;padding:12px}
   h1{font-size:20px;margin:10px 0 6px 0}
   .sub{color:var(--muted);font-size:12px;margin-bottom:8px}
-  .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:8px}
-  .tab{border:1px solid #ccc;border-radius:999px;padding:6px 10px;background:#fff;white-space:nowrap;cursor:pointer}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:8px;position:relative;z-index:5}
+  .tab{border:1px solid #ccc;border-radius:999px;padding:8px 12px;background:#fff;cursor:pointer}
   .tab.active{background:#000;color:#fff;border-color:#000}
   .row{background:var(--card);border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
   .row.today{outline:2px solid var(--ring)}
@@ -25,11 +26,6 @@
   .pill .t{font-weight:600;font-size:12px}
   .pill .v{font-size:12px}
   .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}
-  input, select{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px}
-  .btn{font-size:12px;border:1px solid #ddd;border-radius:8px;padding:6px 10px;background:#f3f4f6;cursor:pointer}
-  .btn.danger{background:#fee2e2;color:#b91c1c;border-color:#fecaca}
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:10px}
-  .grid3{display:grid;grid-template-columns:1fr 90px 140px;gap:8px}
   canvas{max-width:100%}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -38,18 +34,10 @@
 <div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3.8 • Today highlight + sets×reps fixed</div>
+    <div class="sub">v3.9 • iPhone tabs hotfix • Today + sets×reps intact</div>
   </header>
-  <nav class="tabs">
-    <button class="tab active" id="tab-tracker">Tracker</button>
-    <button class="tab" id="tab-train">Training Log</button>
-    <button class="tab" id="tab-bw">Body Weight</button>
-    <button class="tab" id="tab-trends">Lift Trends</button>
-    <button class="tab" id="tab-proj">Weight Projection</button>
-  </nav>
-  <main>
-    <section id="page-tracker"></section>
-  </main>
+  <nav class="tabs" id="tabs"></nav>
+  <main id="main"></main>
 </div>
 <script>
 function isoLocal(d){const dt=new Date(d);return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");}
@@ -61,8 +49,7 @@ const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250
           {w:[6,7],cal:1950,p:175,c:150,f:60,b:{strength:325,cardio:275,hiit:250,rest:150}}];
 function phase(w){return PH.find(x=>x.w.includes(w))||PH[PH.length-1];}
 function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x;}
-function dn(d){return d.toLocaleDateString('en-US',{weekday:'short'});}
-function lab(d){return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'});}
+function dn(d){return d.toLocaleDateString('en-US',{weekday:'short'});}function lab(d){return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'});}
 function isCheat(d){const k=Math.floor((d-START)/86400000);return k>=0&&k%10===6;}
 const T_FROM=new Date('2025-10-16T00:00:00'),T_TO=new Date('2025-10-20T23:59:59');
 function isTravel(d){return d>=T_FROM&&d<=T_TO;}
@@ -100,24 +87,28 @@ function el(tag,props={},...kids){const e=document.createElement(tag);Object.ent
 function clear(n){while(n.firstChild)n.removeChild(n.firstChild);}
 
 function renderTracker(){
- const root=document.getElementById('page-tracker');clear(root);
+ const tabs=document.getElementById('tabs'); const main=document.getElementById('main'); clear(tabs); clear(main);
  const today=new Date();
- const m=new Map();planDays.forEach(d=>{if(!m.has(d.week))m.set(d.week,[]);m.get(d.week).push(d);});
+ const m=new Map(); planDays.forEach(d=>{ if(!m.has(d.week)) m.set(d.week, []); m.get(d.week).push(d); });
  const weeks=[...m.entries()].map(([w,items])=>({week:w,items}));
- let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week||weeks[0].week;
- const tabs=el('div',{class:'tabs'});
- weeks.forEach(w=>{const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`);b.onclick=()=>{activeWeek=w.week;draw();};tabs.appendChild(b);});
- root.appendChild(tabs);
- const container=el('div');root.appendChild(container);
- function draw(){clear(container);const w=weeks.find(x=>x.week===activeWeek);
-   const title=el('div',{class:'sub'},`Week ${w.week} • Goal ${w.items[0].goal.toFixed(1)} kg`);container.appendChild(title);
-   w.items.forEach(d=>{const isToday=sameDay(d.date,today);const li=el('div',{class:'row'+(isToday?' today':'')});
-     const head=el('div',{class:'datewrap'});head.append(el('div',{},d.dayName+' '+d.label));if(isToday)head.append(el('span',{class:'badge'},'TODAY'));li.append(head);
-     li.append(el('div',{},'🏋️ ',d.desc));
-     const grid=el('div',{class:'grid'});[['Burn',d.burn+' kcal'],['Food',d.cal+' kcal'],['Carbs',d.c+' g'],['Fat',d.f+' g']].forEach(([t,v])=>{grid.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)));});li.append(grid);
-     const grid2=el('div',{class:'grid2'});[['Protein',d.p+' g'],['Goal',w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=>{grid2.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)));});li.append(grid2);
-     container.appendChild(li);});}
- draw();
+ let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week || weeks[0].week;
+ // Build wrap-friendly chips (no horizontal scrolling needed)
+ weeks.forEach(w=>{ const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`);
+   b.addEventListener('click',()=>{activeWeek=w.week; renderTracker();});
+   tabs.appendChild(b);
+ });
+ const container=el('div'); main.appendChild(container);
+ const w=weeks.find(x=>x.week===activeWeek);
+ const title=el('div',{class:'sub'},`Week ${w.week} • Goal ${w.items[0].goal.toFixed(1)} kg`); container.appendChild(title);
+ w.items.forEach(d=>{
+   const isToday=sameDay(d.date,today);
+   const li=el('div',{class:'row'+(isToday?' today':'')});
+   const head=el('div',{class:'datewrap'}); head.append(el('div',{}, d.dayName+' '+d.label)); if(isToday) head.append(el('span',{class:'badge'},'TODAY')); li.append(head);
+   li.append(el('div',{}, '🏋️ ', d.desc));
+   const grid=el('div',{class:'grid'}); [['Burn',d.burn+' kcal'],['Food',d.cal+' kcal'],['Carbs',d.c+' g'],['Fat',d.f+' g']].forEach(([t,v])=>{grid.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)));}); li.append(grid);
+   const grid2=el('div',{class:'grid2'}); [['Protein',d.p+' g'],['Goal',w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=>{grid2.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)));}); li.append(grid2);
+   container.appendChild(li);
+ });
 }
 renderTracker();
 </script>
