@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3.6">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.6">
+<link rel="manifest" href="manifest.webmanifest?v=3.7">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.7">
 <meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ok:#0a7b34;--ring:#3b82f6;}
@@ -17,6 +17,9 @@
   .tab{border:1px solid #ccc;border-radius:999px;padding:6px 10px;background:#fff;white-space:nowrap;cursor:pointer}
   .tab.active{background:#000;color:#fff;border-color:#000}
   .row{background:var(--card);border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
+  .row.today{outline:2px solid var(--ring)}
+  .datewrap{display:flex;align-items:center;gap:6px}
+  .badge{font-size:10px;background:#3b82f6;color:#fff;border-radius:999px;padding:2px 6px}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
   .pill{background:#f3f4f6;border-radius:10px;padding:6px;text-align:center}
   .pill .t{font-weight:600;font-size:12px}
@@ -35,7 +38,7 @@
 <div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3.6 • Classic UI • Updated workouts + travel</div>
+    <div class="sub">v3.7 • Classic UI • Today highlight + sets×reps</div>
   </header>
 
   <nav class="tabs">
@@ -56,11 +59,12 @@
 </div>
 
 <script>
-// ----- Storage helpers -----
+// ----- Helpers -----
 function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=('0'+(dt.getMonth()+1)).slice(-2), da=('0'+dt.getDate()).slice(-2); return y+'-'+m+'-'+da; }
+function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
 
-// ----- Core plan (rotations + travel block) -----
+// ----- Core plan w/ rotations + travel block & sets×reps -----
 const START=new Date('2025-10-12T00:00:00'), END=new Date('2025-12-01T00:00:00');
 const GOAL=[75.8,74.6,73.2,71.8,70.3,68.8,67.0];
 const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250,rest:150}},
@@ -71,26 +75,35 @@ function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; 
 function dn(d){ return d.toLocaleDateString('en-US',{weekday:'short'}); }
 function lab(d){ return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'}); }
 function isCheat(d){ const k=Math.floor((d-START)/86400000); return k>=0 && k%10===6; }
-// travel Thu Oct 16 -> Mon Oct 20
 const T_FROM=new Date('2025-10-16T00:00:00'), T_TO=new Date('2025-10-20T23:59:59');
 function isTravel(d){ return d>=T_FROM && d<=T_TO; }
 function wo(week, jsDay, d){
-  if(isTravel(d)){ if(jsDay===0) return "Travel — Active Recovery: 30–40 min walk + mobility";
-    return "Travel — Skipping 10x(30s/15s); Push-Ups 3x15–20; Squats 3x20; Plank 3x60s; (opt) Burpees 2x10"; }
+  if(isTravel(d)){
+    if(jsDay===0) return "Travel — Active Recovery: Walk 30–40 min + mobility 10 min";
+    return "Travel — Skipping 10×(30s/15s); Push-Ups 3×15–20; Bodyweight Squats 3×20; Plank 3×60s; (Opt) Burpees 2×10";
+  }
   const b = week<=2?1:(week<=4?2:3);
-  if(jsDay===1){ if(b===1) return "Push: Bench Press; Incline DB Press; Overhead Press; Cable Fly; Triceps Pushdown";
-                 if(b===2) return "Push: DB Bench Press; Arnold Press; Pec Deck; Lateral Raise; Overhead Rope Extension";
-                 return "Push: Close-Grip Bench; Seated DB Shoulder Press; Machine Fly; Lateral Raise; Skull Crushers"; }
-  if(jsDay===2){ if(b===1) return "Pull: Deadlift; Lat Pulldown; Seated Row; Face Pull; DB Curl";
-                 if(b===2) return "Pull: Rack Pull; Chin-Up; T-Bar Row; Rear Delt Fly; Hammer Curl";
-                 return "Pull: Deadlift; DB Pullover; One-Arm Row; Face Pull; Cable Curl"; }
-  if(jsDay===3){ if(b===1) return "Legs: Back Squat; Romanian Deadlift; Leg Press; Walking Lunge; Calf Raise";
-                 if(b===2) return "Legs: Front Squat; Hip Thrust; Hack Squat; Step-Up; Calf Raise";
-                 return "Legs: Bulgarian Split Squat; Stiff-Leg Deadlift; Leg Extension; Leg Curl; Calf Raise"; }
-  if(jsDay===4){ return "Cardio: Zone 2 30–40 min + 10 min mobility"; }
-  if(jsDay===5){ if(b===1) return "Upper Power: Bench 5x5; Barbell Row 5x5; Pull-Ups AMRAP; Dips 3x10; Hanging Leg Raise";
-                 if(b===2) return "Upper Power: Incline Bench 5x5; Weighted Chin-Up 5x5; DB Row 3x10; Close-Grip Push-Up 3x15; Cable Crunch";
-                 return "Upper Power: Flat DB Press 5x5; Pendlay Row 5x5; Pull-Up AMRAP; Dips 3x12; Ab Wheel Rollout"; }
+  if(jsDay===1){ // Push
+    if(b===1) return "Push: Bench Press 4×8; Incline DB Press 3×10; Overhead Press 3×8; Cable Fly 3×15; Triceps Pushdown 3×12";
+    if(b===2) return "Push: DB Bench Press 4×8; Arnold Press 3×10; Pec Deck 3×15; Lateral Raise 3×15; Overhead Rope Extension 3×12";
+    return "Push: Close-Grip Bench 4×8; Seated DB Shoulder Press 3×10; Machine Fly 3×15; Lateral Raise 3×15; Skull Crushers 3×12";
+  }
+  if(jsDay===2){ // Pull
+    if(b===1) return "Pull: Deadlift 4×6; Lat Pulldown 3×10; Seated Row 3×10; Face Pull 3×15; DB Curl 3×10";
+    if(b===2) return "Pull: Rack Pull 4×6; Chin-Up 4×AMRAP; T-Bar Row 3×10; Rear Delt Fly 3×15; Hammer Curl 3×10";
+    return "Pull: Deadlift 4×6; DB Pullover 3×12; One-Arm Row 3×10; Face Pull 3×15; Cable Curl 3×12";
+  }
+  if(jsDay===3){ // Legs
+    if(b===1) return "Legs: Back Squat 4×8; Romanian Deadlift 3×10; Leg Press 3×12; Walking Lunge 3×12; Calf Raise 4×15";
+    if(b===2) return "Legs: Front Squat 4×6–8; Hip Thrust 3×10; Hack Squat 3×10; Step-Up 3×12; Calf Raise 4×15";
+    return "Legs: Bulgarian Split Squat 3×10/leg; Stiff-Leg Deadlift 3×10; Leg Extension 3×12; Leg Curl 3×12; Calf Raise 4×15";
+  }
+  if(jsDay===4){ return "Cardio: Zone 2 30–40 min + Mobility 10 min"; }
+  if(jsDay===5){ // Upper Power
+    if(b===1) return "Upper Power: Bench 5×5; Barbell Row 5×5; Pull-Ups AMRAP; Dips 3×10; Hanging Leg Raise 3×15";
+    if(b===2) return "Upper Power: Incline Bench 5×5; Weighted Chin-Up 5×5; DB Row 3×10; Close-Grip Push-Up 3×15; Cable Crunch 3×15";
+    return "Upper Power: Flat DB Press 5×5; Pendlay Row 5×5; Pull-Up AMRAP; Dips 3×12; Ab Wheel Rollout 3×10";
+  }
   if(jsDay===6){ return "Cardio: Zone 2 30–40 min (or Skipping Intervals)"; }
   return "Rest / Active Recovery (Walk + Stretch)";
 }
@@ -118,9 +131,10 @@ function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
 // ----- Pages -----
 function renderTracker(){
   const root=document.getElementById('page-tracker'); clear(root);
+  const today=new Date();
   const m=new Map(); planDays.forEach(d=>{ if(!m.has(d.week)) m.set(d.week, []); m.get(d.week).push(d); });
   const weeks=[...m.entries()].map(([w,items])=>({week:w,items}));
-  let activeWeek=weeks[0].week;
+  let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week || weeks[0].week;
 
   const tabs=el('div',{class:'tabs'});
   weeks.forEach(w=>{ const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`); b.onclick=()=>{ activeWeek=w.week; draw(); }; tabs.appendChild(b); });
@@ -130,13 +144,17 @@ function renderTracker(){
   function draw(){
     clear(container);
     const w=weeks.find(x=>x.week===activeWeek);
-    const title=el('div',{class:'sub'}, `Week ${w.week} • Goal `, el('span',{class:'goal'}, `${w.items[0].goal.toFixed(1)} kg`));
+    const title=el('div',{class:'sub'}, `Week ${w.week} • Goal ${w.items[0].goal.toFixed(1)} kg`);
     container.appendChild(title);
 
     w.items.forEach(d=>{
-      const li=el('div',{class:'row'});
-      li.append(el('div',{}, d.dayName+' '+d.label));
-      li.append(el('div',{}, '🏋️ '+d.desc));
+      const isToday = sameDay(d.date, today);
+      const li=el('div',{class:'row'+(isToday?' today':'')});
+      const head=el('div',{class:'datewrap'});
+      head.append(el('div',{}, d.dayName+' '+d.label));
+      if(isToday){ head.append(el('span',{class:'badge'},'TODAY')); }
+      li.append(head);
+      li.append(el('div',{}, '🏋️ ', d.desc));
       const grid=el('div',{class:'grid'});
       [['Burn', d.burn+' kcal'], ['Food', d.cal+' kcal'], ['Carbs', d.c+' g'], ['Fat', d.f+' g']].forEach(([t,v])=>{
         grid.append(el('div',{class:'pill'}, el('div',{class:'t'}, t), el('div',{class:'v'}, v)));
@@ -197,7 +215,7 @@ function renderBW(){
   tbl.append(tb); root.append(tbl);
 }
 
-// Event delegation (works after redraws)
+// Event delegation
 if(!window.__delegated){
   document.addEventListener('click', (e)=>{
     const t=e.target; if(!(t instanceof Element)) return;
@@ -207,8 +225,7 @@ if(!window.__delegated){
       const r =Number((document.getElementById('tl-r')||{}).value || 0);
       const d =(document.getElementById('tl-d')||{}).value || isoLocal(new Date());
       const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push({id:crypto.randomUUID(), date:d, exercise:ex, weight:w, reps:r});
-      localStorage.setItem(SK.LIFTS, JSON.stringify(arr));
-      renderTrain(); return;
+      localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return;
     }
     if(t.dataset && t.dataset.action==='del-lift'){
       const id=t.dataset.id; const arr=(JSON.parse(localStorage.getItem(SK.LIFTS)||'[]')).filter(x=>x.id!==id);
