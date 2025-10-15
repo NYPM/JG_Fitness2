@@ -1,22 +1,22 @@
 <!doctype html>
-<html lang=\"en\">
+<html lang="en">
 <head>
-<meta charset=\"utf-8\">
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel=\"manifest\" href=\"manifest.webmanifest?v=3.4\">
-<link rel=\"apple-touch-icon\" href=\"icons/icon-192.svg?v=3.4\">
-<meta name=\"theme-color\" content=\"#0b5fff\">
+<link rel="manifest" href="manifest.webmanifest?v=3.6">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.6">
+<meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ok:#0a7b34;--ring:#3b82f6;}
   body{margin:0;background:var(--bg);color:var(--fg);font:14px system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
   .wrap{max-width:820px;margin:0 auto;padding:12px}
   h1{font-size:20px;margin:10px 0 6px 0}
-  .sub{color:#666;font-size:12px;margin-bottom:8px}
+  .sub{color:var(--muted);font-size:12px;margin-bottom:8px}
   .tabs{display:flex;gap:8px;overflow:auto;padding-bottom:8px}
   .tab{border:1px solid #ccc;border-radius:999px;padding:6px 10px;background:#fff;white-space:nowrap;cursor:pointer}
   .tab.active{background:#000;color:#fff;border-color:#000}
-  .row{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
+  .row{background:var(--card);border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
   .pill{background:#f3f4f6;border-radius:10px;padding:6px;text-align:center}
   .pill .t{font-weight:600;font-size:12px}
@@ -24,34 +24,43 @@
   .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}
   input, select{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px}
   .btn{font-size:12px;border:1px solid #ddd;border-radius:8px;padding:6px 10px;background:#f3f4f6;cursor:pointer}
+  .btn.danger{background:#fee2e2;color:#b91c1c;border-color:#fecaca}
   .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:10px}
   .grid3{display:grid;grid-template-columns:1fr 90px 140px;gap:8px}
+  canvas{max-width:100%}
 </style>
-<script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-<div class=\"wrap\">
+<div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class=\"sub\">v3.4 • Workout rotation + travel block • Offline-ready</div>
+    <div class="sub">v3.6 • Classic UI • Updated workouts + travel</div>
   </header>
-  <nav class=\"tabs\">
-    <button class=\"tab active\" id=\"tab-tracker\">Tracker</button>
-    <button class=\"tab\" id=\"tab-train\">Training Log</button>
-    <button class=\"tab\" id=\"tab-bw\">Body Weight</button>
-    <button class=\"tab\" id=\"tab-trends\">Lift Trends</button>
-    <button class=\"tab\" id=\"tab-proj\">Weight Projection</button>
+
+  <nav class="tabs">
+    <button class="tab active" id="tab-tracker">Tracker</button>
+    <button class="tab" id="tab-train">Training Log</button>
+    <button class="tab" id="tab-bw">Body Weight</button>
+    <button class="tab" id="tab-trends">Lift Trends</button>
+    <button class="tab" id="tab-proj">Weight Projection</button>
   </nav>
+
   <main>
-    <section id=\"page-tracker\"></section>
-    <section id=\"page-train\" style=\"display:none\"></section>
-    <section id=\"page-bw\" style=\"display:none\"></section>
-    <section id=\"page-trends\" style=\"display:none\"></section>
-    <section id=\"page-proj\" style=\"display:none\"></section>
+    <section id="page-tracker"></section>
+    <section id="page-train" style="display:none"></section>
+    <section id="page-bw" style="display:none"></section>
+    <section id="page-trends" style="display:none"></section>
+    <section id="page-proj" style="display:none"></section>
   </main>
 </div>
+
 <script>
+// ----- Storage helpers -----
 function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=('0'+(dt.getMonth()+1)).slice(-2), da=('0'+dt.getDate()).slice(-2); return y+'-'+m+'-'+da; }
+const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
+
+// ----- Core plan (rotations + travel block) -----
 const START=new Date('2025-10-12T00:00:00'), END=new Date('2025-12-01T00:00:00');
 const GOAL=[75.8,74.6,73.2,71.8,70.3,68.8,67.0];
 const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250,rest:150}},
@@ -59,8 +68,10 @@ const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250
           {w:[6,7],cal:1950,p:175,c:150,f:60,b:{strength:325,cardio:275,hiit:250,rest:150}}];
 function phase(w){ return PH.find(x=>x.w.includes(w))||PH[PH.length-1]; }
 function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function dn(d){ return d.toLocaleDateString('en-US',{weekday:'short'}); }
 function lab(d){ return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'}); }
 function isCheat(d){ const k=Math.floor((d-START)/86400000); return k>=0 && k%10===6; }
+// travel Thu Oct 16 -> Mon Oct 20
 const T_FROM=new Date('2025-10-16T00:00:00'), T_TO=new Date('2025-10-20T23:59:59');
 function isTravel(d){ return d>=T_FROM && d<=T_TO; }
 function wo(week, jsDay, d){
@@ -85,56 +96,181 @@ function wo(week, jsDay, d){
 }
 function buildPlan(){
   const out=[]; let d=new Date(START), w=1;
-  while(d<=END){ if(d.getDay()===1 && out.length) w++; const ph=phase(w);
+  while(d<=END){
+    if(d.getDay()===1 && out.length) w++;
+    const ph=phase(w);
     const desc=wo(w,d.getDay(),d);
     let type = desc.startsWith("Cardio")?"cardio":(desc.startsWith("Upper Power")||desc.startsWith("Push")||desc.startsWith("Pull")||desc.startsWith("Legs")?"strength":(desc.startsWith("Travel")?(desc.includes("Skipping")?"hiit":"rest"):"rest"));
-    let cal=ph.cal, p=ph.p, c=ph.c, f=ph.f; if(isCheat(d)){ cal=3000; type='rest'; }
+    let cal=ph.cal, p=ph.p, c=ph.c, f=ph.f;
+    if(isCheat(d)){ cal=3000; type='rest'; }
     const burn=ph.b[type]||ph.b.rest;
-    out.push({date:new Date(d), week:w, dayName:d.toLocaleDateString('en-US',{weekday:'short'}), label:lab(d), desc, type, cal, p, c, f, burn, goal: GOAL[Math.min(w-1,GOAL.length-1)]});
+    out.push({date:new Date(d), week:w, dayName:dn(d), label:lab(d), desc, type, cal, p, c, f, burn, goal: GOAL[Math.min(w-1,GOAL.length-1)]});
     d=addDays(d,1);
-  } return out;
+  }
+  return out;
 }
 const planDays=buildPlan();
 
+// ----- UI helpers -----
 function el(tag, props={}, ...kids){ const e=document.createElement(tag); Object.entries(props).forEach(([k,v])=>{ if(k==='class') e.className=v; else if(k==='html') e.innerHTML=v; else e.setAttribute(k,v); }); kids.flat().forEach(k=>{ if(typeof k==='string') e.appendChild(document.createTextNode(k)); else if(k) e.appendChild(k); }); return e; }
 function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
 
+// ----- Pages -----
 function renderTracker(){
   const root=document.getElementById('page-tracker'); clear(root);
-  const m=new Map(); planDays.forEach(d=>{ if(!m.has(d.week)) m.set(d.week,[]); m.get(d.week).push(d); });
+  const m=new Map(); planDays.forEach(d=>{ if(!m.has(d.week)) m.set(d.week, []); m.get(d.week).push(d); });
   const weeks=[...m.entries()].map(([w,items])=>({week:w,items}));
   let activeWeek=weeks[0].week;
-  const tabs=el('div',{class:'tabs'}); weeks.forEach(w=>{ const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`); b.onclick=()=>{activeWeek=w.week; draw();}; tabs.appendChild(b); }); root.appendChild(tabs);
+
+  const tabs=el('div',{class:'tabs'});
+  weeks.forEach(w=>{ const b=el('button',{class:'tab'+(w.week===activeWeek?' active':'' )},`Week ${w.week}`); b.onclick=()=>{ activeWeek=w.week; draw(); }; tabs.appendChild(b); });
+  root.appendChild(tabs);
   const container=el('div'); root.appendChild(container);
-  function draw(){ clear(container); const w=weeks.find(x=>x.week===activeWeek); const title=el('div',{class:'sub'},`Week ${w.week} • Goal `,el('span',{class:'goal'},`${w.items[0].goal.toFixed(1)} kg`)); container.appendChild(title);
-    w.items.forEach(d=>{ const li=el('div',{class:'row'}); li.append(el('div',{}, d.dayName+' '+d.label)); li.append(el('div',{}, '🏋️ '+d.desc));
-      const grid=el('div',{class:'grid'}); [['Burn', d.burn+' kcal'],['Food', d.cal+' kcal'],['Carbs', d.c+' g'],['Fat', d.f+' g']].forEach(([t,v])=> grid.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)))); li.append(grid);
-      const grid2=el('div',{class:'grid2'}); [['Protein', d.p+' g'],['Goal', w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=> grid2.append(el('div',{class:'pill'},el('div',{class:'t'},t),el('div',{class:'v'},v)))); li.append(grid2); container.appendChild(li); }); }
+
+  function draw(){
+    clear(container);
+    const w=weeks.find(x=>x.week===activeWeek);
+    const title=el('div',{class:'sub'}, `Week ${w.week} • Goal `, el('span',{class:'goal'}, `${w.items[0].goal.toFixed(1)} kg`));
+    container.appendChild(title);
+
+    w.items.forEach(d=>{
+      const li=el('div',{class:'row'});
+      li.append(el('div',{}, d.dayName+' '+d.label));
+      li.append(el('div',{}, '🏋️ '+d.desc));
+      const grid=el('div',{class:'grid'});
+      [['Burn', d.burn+' kcal'], ['Food', d.cal+' kcal'], ['Carbs', d.c+' g'], ['Fat', d.f+' g']].forEach(([t,v])=>{
+        grid.append(el('div',{class:'pill'}, el('div',{class:'t'}, t), el('div',{class:'v'}, v)));
+      });
+      li.append(grid);
+      const grid2=el('div',{class:'grid2'});
+      [['Protein', d.p+' g'], ['Goal', w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=>{
+        grid2.append(el('div',{class:'pill'}, el('div',{class:'t'}, t), el('div',{class:'v'}, v)));
+      });
+      container.appendChild(li);
+    });
+  }
   draw();
 }
 
-const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
-function renderTrain(){ const root=document.getElementById('page-train'); clear(root);
+function renderTrain(){
+  const root=document.getElementById('page-train'); clear(root);
   const entries = JSON.parse(localStorage.getItem(SK.LIFTS)||'[]');
-  const row = el('div',{class:'card'}); const sel=el('select',{id:'tl-ex'}); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x)));
-  const w=el('input',{id:'tl-w',type:'number',placeholder:'kg'}), r=el('input',{id:'tl-r',type:'number',placeholder:'reps'}), d=el('input',{id:'tl-d',type:'date',value: isoLocal(new Date())});
-  const add=el('button',{id:'tl-add',class:'btn',type:'button'},'Add'); row.append(el('div',{class:'grid3'}, sel,w,r), el('div',{}, d,' ',add)); root.append(row);
-  const by=new Map(); entries.forEach(e=>{ if(!by.has(e.exercise)) by.set(e.exercise,[]); by.get(e.exercise).push(e); });
-  ;[...by.keys()].sort().forEach(ex=>{ const sec=el('div',{class:'card'}); sec.append(el('div',{class:'sub',html:'<b>'+ex+'</b>'})); const tbl=el('table',{style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th>Reps</th></tr></thead>'; const tb=el('tbody');
-    by.get(ex).sort((a,b)=>a.date.localeCompare(b.date)).forEach(rw=>{ const tr=el('tr'); tr.append(el('td',{},rw.date), el('td',{},String(rw.weight)), el('td',{},String(rw.reps))); tb.append(tr); }); tbl.append(tb); sec.append(tbl); root.append(sec); });
-  document.getElementById('tl-add').addEventListener('click', ()=>{ const rec={id:crypto.randomUUID(), date:d.value, exercise:sel.value, weight:Number(w.value||0), reps:Number(r.value||0)}; const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push(rec); localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); });
+  const row=el('div',{class:'card'});
+  const sel=el('select',{id:'tl-ex'}); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x)));
+  const wt=el('input',{id:'tl-w',type:'number',placeholder:'kg'}), reps=el('input',{id:'tl-r',type:'number',placeholder:'reps'}), date=el('input',{id:'tl-d',type:'date',value: isoLocal(new Date())});
+  const add=el('button',{id:'tl-add',class:'btn',type:'button'},'Add');
+  row.append(el('div',{class:'grid3'}, sel, wt, reps), el('div',{}, date, ' ', add));
+  root.append(row);
+
+  const by=new Map(); entries.forEach(e=>{ if(!by.has(e.exercise)) by.set(e.exercise, []); by.get(e.exercise).push(e); });
+  ;[...by.keys()].sort().forEach(ex=>{
+    const sec=el('div',{class:'card'});
+    sec.append(el('div',{class:'sub',html:'<b>'+ex+'</b>'}));
+    const tbl=el('table',{style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th>Reps</th><th></th></tr></thead>';
+    const tb=el('tbody');
+    by.get(ex).sort((a,b)=>a.date.localeCompare(b.date)).forEach(r=>{
+      const tr=el('tr');
+      tr.append(el('td',{}, r.date), el('td',{}, String(r.weight)), el('td',{}, String(r.reps)));
+      const del=el('button',{class:'btn danger',type:'button','data-action':'del-lift','data-id':r.id},'Delete');
+      tr.append(el('td',{}, del)); tb.append(tr);
+    });
+    tbl.append(tb); sec.append(tbl); root.append(sec);
+  });
 }
-function renderBW(){ const root=document.getElementById('page-bw'); clear(root);
+
+function renderBW(){
+  const root=document.getElementById('page-bw'); clear(root);
   const arr=JSON.parse(localStorage.getItem(SK.BW)||'[]');
-  const card=el('div',{class:'card'}); const wt=el('input',{id:'bw-w',type:'number',placeholder:'kg'}), d=el('input',{id:'bw-d',type:'date',value: isoLocal(new Date())}); const add=el('button',{id:'bw-add',class:'btn',type:'button'},'Add/Update'); card.append(el('div',{class:'grid3'}, wt, add, d)); root.append(card);
-  const tbl=el('table',{class:'card',style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th></tr></thead>'; const tb=el('tbody'); arr.forEach(r=>{ const tr=el('tr'); tr.append(el('td',{},r.date), el('td',{},String(r.weight))); tb.append(tr); }); tbl.append(tb); root.append(tbl);
-  document.getElementById('bw-add').addEventListener('click', ()=>{ const vdate=d.value, vwt=Number(wt.value||0); const a=JSON.parse(localStorage.getItem(SK.BW)||'[]').filter(x=>x.date!==vdate); a.push({date:vdate,weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date)); localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); });
+  const card=el('div',{class:'card'});
+  const wt=el('input',{id:'bw-w',type:'number',placeholder:'kg'}), date=el('input',{id:'bw-d',type:'date',value: isoLocal(new Date())});
+  const add=el('button',{id:'bw-add',class:'btn',type:'button'},'Add/Update');
+  card.append(el('div',{class:'grid3'}, wt, add, date));
+  root.append(card);
+
+  const tbl=el('table',{class:'card',style:'width:100%'}); tbl.innerHTML='<thead><tr><th>Date</th><th>Weight (kg)</th><th></th></tr></thead>';
+  const tb=el('tbody');
+  arr.forEach(r=>{
+    const tr=el('tr'); tr.append(el('td',{}, r.date), el('td',{}, String(r.weight)));
+    const del=el('button',{class:'btn danger',type:'button','data-action':'del-bw','data-date':r.date},'Delete');
+    tr.append(el('td',{}, del)); tb.append(tr);
+  });
+  tbl.append(tb); root.append(tbl);
 }
+
+// Event delegation (works after redraws)
+if(!window.__delegated){
+  document.addEventListener('click', (e)=>{
+    const t=e.target; if(!(t instanceof Element)) return;
+    if(t.id==='tl-add'){
+      const ex=(document.getElementById('tl-ex')||{}).value || "Bench Press";
+      const w =Number((document.getElementById('tl-w')||{}).value || 0);
+      const r =Number((document.getElementById('tl-r')||{}).value || 0);
+      const d =(document.getElementById('tl-d')||{}).value || isoLocal(new Date());
+      const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push({id:crypto.randomUUID(), date:d, exercise:ex, weight:w, reps:r});
+      localStorage.setItem(SK.LIFTS, JSON.stringify(arr));
+      renderTrain(); return;
+    }
+    if(t.dataset && t.dataset.action==='del-lift'){
+      const id=t.dataset.id; const arr=(JSON.parse(localStorage.getItem(SK.LIFTS)||'[]')).filter(x=>x.id!==id);
+      localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return;
+    }
+    if(t.id==='bw-add'){
+      const vdate=(document.getElementById('bw-d')||{}).value || ''; const vwt=Number((document.getElementById('bw-w')||{}).value || 0);
+      if(!vdate){ alert('Pick a date'); return; }
+      const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==vdate); a.push({date:vdate, weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date));
+      localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return;
+    }
+    if(t.dataset && t.dataset.action==='del-bw'){
+      const d=t.dataset.date; const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==d);
+      localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return;
+    }
+  });
+  window.__delegated=true;
+}
+
+// Charts
 function epley1RM(w,r){ return w*(1+r/30); }
-function renderTrends(){ const root=document.getElementById('page-trends'); clear(root); const entries=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); const sel=el('select'); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x))); root.append(el('div',{},sel)); const can=el('canvas'); can.height=320; root.append(el('div',{class:'card'},can)); let chart; function draw(){ const arr=entries.filter(e=>e.exercise===sel.value).sort((a,b)=>a.date.localeCompare(b.date)); const labels=arr.map(e=>e.date); const values=arr.map(e=>Math.round(epley1RM(e.weight||0, e.reps||1)*10)/10); if(chart) chart.destroy(); chart=new Chart(can.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Est. 1RM (kg)',data:values,borderColor:'#0b5fff',tension:0.2,pointRadius:2}]},options:{maintainAspectRatio:false}});} sel.addEventListener('change',draw); draw(); }
-function renderProj(){ const root=document.getElementById('page-proj'); clear(root); const anchors=[]; for(let w=1; w<=7; w++){ const wk=planDays.filter(x=>x.week===w); if(wk.length){ anchors.push({ts:+wk[0].date, weight:wk[0].goal}); } } const last=planDays[planDays.length-1]; anchors.push({ts:+last.date, weight:last.goal}); const bw=JSON.parse(localStorage.getItem(SK.BW)||'[]'); const bwMap=new Map(bw.map(x=>[x.date,x.weight])); const proj=planDays.map(d=>{ const t=+d.date; let prev=anchors[0], next=anchors[anchors.length-1]; for(let i=0;i<anchors.length-1;i++){ if(t>=anchors[i].ts && t<=anchors[i+1].ts){ prev=anchors[i]; next=anchors[i+1]; break; } } const span=Math.max(1,next.ts-prev.ts); const a=Math.min(1,Math.max(0,(t-prev.ts)/span)); const projected=+(prev.weight+(next.weight-prev.weight)*a).toFixed(1); return {date: isoLocal(d.date), projected}; }); const labels=proj.map(p=>p.date), projected=proj.map(p=>p.projected), realized=labels.map(d=>bwMap.get(d) ?? null); const can=el('canvas'); can.height=320; const card=el('div',{class:'card'},can); root.append(card); new Chart(can.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Projected (kg)',data:projected,borderColor:'#0b5fff',tension:0.2,pointRadius:0},{label:'Realized (kg)',data:realized,borderColor:'#16a34a',tension:0.2,pointRadius:3}]},options:{maintainAspectRatio:false}}); }
-function showPage(id){ window.__page=id; const ids=['tracker','train','bw','trends','proj']; ids.forEach(n=> document.getElementById('page-'+n).style.display=(n===id)?'block':'none'); document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ids[i]===id)); if(id==='tracker') renderTracker(); if(id==='train') renderTrain(); if(id==='bw') renderBW(); if(id==='trends') renderTrends(); if(id==='proj') renderProj(); }
-document.getElementById('tab-tracker').addEventListener('click',()=>showPage('tracker')); document.getElementById('tab-train').addEventListener('click',()=>showPage('train')); document.getElementById('tab-bw').addEventListener('click',()=>showPage('bw')); document.getElementById('tab-trends').addEventListener('click',()=>showPage('trends')); document.getElementById('tab-proj').addEventListener('click',()=>showPage('proj')); showPage('tracker');
+function renderTrends(){
+  const root=document.getElementById('page-trends'); clear(root);
+  const entries=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]');
+  const sel=el('select'); ["Bench Press","Incline DB Press","Overhead Press","Cable Fly","Lateral Raise","Triceps Pushdown","Deadlift","Lat Pulldown","Seated Row","Face Pull","DB Curl","Hammer Curl","Back Squat","Romanian Deadlift","Leg Press","Walking Lunge","Calf Raise","Pull-ups","Dips","Core"].forEach(x=> sel.append(el('option',{value:x},x)));
+  root.append(el('div',{}, sel));
+  const can=el('canvas'); can.height=320; root.append(el('div',{class:'card'}, can));
+  let chart; function draw(){ const arr=entries.filter(e=>e.exercise===sel.value).sort((a,b)=>a.date.localeCompare(b.date));
+    const labels=arr.map(e=>e.date), values=arr.map(e=>Math.round(epley1RM(e.weight||0,e.reps||1)*10)/10);
+    if(chart) chart.destroy(); chart=new Chart(can.getContext('2d'), {type:'line',data:{labels,datasets:[{label:'Est. 1RM (kg)',data:values,borderColor:'#0b5fff',tension:0.2,pointRadius:2}]},options:{maintainAspectRatio:false}}); }
+  sel.addEventListener('change', draw); draw();
+}
+function renderProj(){
+  const root=document.getElementById('page-proj'); clear(root);
+  const anchors=[]; for(let w=1; w<=7; w++){ const wk=planDays.filter(x=>x.week===w); if(wk.length){ anchors.push({ts:+wk[0].date, weight:wk[0].goal}); } } const last=planDays[planDays.length-1]; anchors.push({ts:+last.date, weight:last.goal});
+  const bw=JSON.parse(localStorage.getItem(SK.BW)||'[]'); const bwMap=new Map(bw.map(x=>[x.date,x.weight]));
+  const proj=planDays.map(d=>{ const t=+d.date; let prev=anchors[0], next=anchors[anchors.length-1]; for(let i=0;i<anchors.length-1;i++){ if(t>=anchors[i].ts && t<=anchors[i+1].ts){ prev=anchors[i]; next=anchors[i+1]; break; } } const span=Math.max(1,next.ts-prev.ts); const a=Math.min(1,Math.max(0,(t-prev.ts)/span)); const projected=+(prev.weight+(next.weight-prev.weight)*a).toFixed(1); return {date: isoLocal(d.date), projected}; });
+  const labels=proj.map(p=>p.date), projected=proj.map(p=>p.projected), realized=labels.map(d=>bwMap.get(d) ?? null);
+  const can=el('canvas'); can.height=320; const card=el('div',{class:'card'}, can); root.append(card);
+  new Chart(can.getContext('2d'), {type:'line', data:{labels, datasets:[{label:'Projected (kg)', data: projected, borderColor:'#0b5fff', tension:0.2, pointRadius:0},{label:'Realized (kg)', data: realized, borderColor:'#16a34a', tension:0.2, pointRadius:3}]}, options:{maintainAspectRatio:false}});
+}
+
+// Router
+function showPage(id){
+  window.__page=id;
+  const ids=['tracker','train','bw','trends','proj'];
+  ids.forEach(n=> document.getElementById('page-'+n).style.display=(n===id)?'block':'none');
+  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.toggle('active', ids[i]===id));
+  if(id==='tracker') renderTracker();
+  if(id==='train') renderTrain();
+  if(id==='bw') renderBW();
+  if(id==='trends') renderTrends();
+  if(id==='proj') renderProj();
+}
+document.getElementById('tab-tracker').addEventListener('click', ()=>showPage('tracker'));
+document.getElementById('tab-train').addEventListener('click', ()=>showPage('train'));
+document.getElementById('tab-bw').addEventListener('click', ()=>showPage('bw'));
+document.getElementById('tab-trends').addEventListener('click', ()=>showPage('trends'));
+document.getElementById('tab-proj').addEventListener('click', ()=>showPage('proj'));
+showPage('tracker');
+
+// PWA
 if('serviceWorker' in navigator){ window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }
 </script>
 </body>
