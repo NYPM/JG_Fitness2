@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3">
+<link rel="manifest" href="manifest.webmanifest?v=3.1">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.1">
 <meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ok:#0a7b34;--ring:#3b82f6;--warn:#b45309;}
@@ -32,12 +32,14 @@
   .btn{font-size:12px;border:1px solid #ddd;border-radius:8px;padding:6px 10px;background:#f3f4f6;cursor:pointer}
   .btn.danger{background:#fee2e2;color:#b91c1c;border-color:#fecaca}
   .toast{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;padding:6px 10px;display:inline-block;margin-top:8px}
+  .toast.warn{background:#fffbeb;border-color:#fcd34d;color:#92400e}
   .summary{background:#000;color:#fff;border-radius:14px;padding:10px;margin-top:10px}
   .summary .g{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:4px}
   .muted{color:#cbd5e1;font-size:12px}
   .goal{font-weight:600}
   .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:10px}
   .grid3{display:grid;grid-template-columns:1fr 90px 90px;gap:8px}
+  .warnbox{background:#fffbeb;border:1px solid #fcd34d;color:#92400e;border-radius:8px;padding:6px 10px;margin:8px 0}
   canvas{max-width:100%}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -46,7 +48,8 @@
 <div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3 • Oct 12 – Dec 1, 2025 • Offline-ready</div>
+    <div class="sub">v3.1 • Offline-ready • Local storage fallback included</div>
+    <div id="storageWarn" class="warnbox" style="display:none">Heads up: persistent storage is unavailable (Private mode or restrictions). Your data will be kept temporarily while this app is open. Export JSON to save a backup.</div>
   </header>
 
   <nav class="tabs">
@@ -67,20 +70,27 @@
 </div>
 
 <script>
-// ---- Local helpers (reliable persistence + local dates) ----
-function isoLocal(d){
-  const dt = new Date(d);
-  const y = dt.getFullYear();
-  const m = String(dt.getMonth()+1).padStart(2,'0');
-  const da= String(dt.getDate()).padStart(2,'0');
-  return `${y}-${m}-${da}`;
+// ---- Storage with fallback ----
+function storageAvailable(){
+  try{ const x='__t__'; window.localStorage.setItem(x,'1'); window.localStorage.removeItem(x); return true; }
+  catch(e){ return false; }
 }
+const MEM = { 'flt-lifts': [], 'flt-bw': [] };
+const HAS_LS = storageAvailable();
+if(!HAS_LS){ document.getElementById('storageWarn').style.display='block'; }
 const LS = {
-  get(k){ try{ return JSON.parse(window.localStorage.getItem(k) || '[]'); }catch{return[]} },
-  set(k,v){ window.localStorage.setItem(k, JSON.stringify(v)); }
+  get(k){ 
+    if(HAS_LS){ try{ return JSON.parse(window.localStorage.getItem(k) || '[]'); }catch{return[]} }
+    return MEM[k] || [];
+  },
+  set(k,v){
+    if(HAS_LS){ window.localStorage.setItem(k, JSON.stringify(v)); }
+    MEM[k] = v;
+  }
 };
 
-// ---- Core plan ----
+// ---- Dates / plan ----
+function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), da=String(dt.getDate()).padStart(2,'0'); return `${y}-${m}-${da}`; }
 const START = new Date('2025-10-12T00:00:00');
 const END   = new Date('2025-12-01T00:00:00');
 const GOAL  = [75.8,74.6,73.2,71.8,70.3,68.8,67.0];
@@ -204,7 +214,7 @@ function renderTrain(){
   const date = el('input',{type:'date', value: isoLocal(new Date())});
   const wt = el('input',{type:'number', placeholder:'kg'});
   const reps = el('input',{type:'number', placeholder:'reps'});
-  const toast = el('div',{class:'toast', style:'display:none'}, 'Saved');
+  const toast = el('div',{class:'toast', style:'display:none'}, HAS_LS ? 'Saved' : 'Saved (temporary)');
   const add = el('button',{class:'btn', onclick:()=>{
     const rec = { id: crypto.randomUUID(), date: date.value, exercise: sel.value, weight: Number(wt.value||0), reps: Number(reps.value||0) };
     const arr = LS.get(SK.LIFTS); arr.push(rec); LS.set(SK.LIFTS, arr);
@@ -254,14 +264,15 @@ function renderBW(){
   const card = el('div',{class:'card'});
   const date = el('input',{type:'date', value: isoLocal(new Date())});
   const wt = el('input',{type:'number', placeholder:'kg'});
-  const toast = el('div',{class:'toast', style:'display:none'}, 'Saved');
+  const toast = el('div',{class:'toast', style:'display:none'}, HAS_LS ? 'Saved' : 'Saved (temporary)');
   const add = el('button',{class:'btn', onclick:()=>{
     const a = LS.get(SK.BW).filter(x=>x.date!==date.value);
     a.push({date: date.value, weight: Number(wt.value||0)}); a.sort((a,b)=>a.date.localeCompare(b.date)); LS.set(SK.BW,a);
     toast.style.display='inline-block'; setTimeout(()=>toast.style.display='none', 1200);
     renderBW(); if(window.__page==='proj') renderProj();
   }}, 'Add/Update');
-  card.append(el('div',{class:'grid3'}, wt, add, date), toast);
+  row = document.createElement('div'); row.className='grid3'; row.append(wt, add, date);
+  card.append(row, toast);
   root.append(card);
 
   const tbl = el('table',{class:'card', style:'width:100%'});
@@ -317,6 +328,7 @@ function renderTrends(){
 
 function renderProj(){
   const root = document.getElementById('page-proj'); clear(root);
+
   const anchors = [];
   for (let w = 1; w <= 7; w++) {
     const wkDays = planDays.filter(x => x.week === w);
