@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3.11.2200">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.11.2200">
+<link rel="manifest" href="manifest.webmanifest?v=3.11.stable">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.11.stable">
 <meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ring:#3b82f6}
@@ -45,7 +45,7 @@
 <div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3.11 (TDEE 2200) • New trajectory & calorie targets</div>
+    <div class="sub">v3.11 • TDEE 2200 • New trajectory & cheats • Stable UI</div>
   </header>
 
   <nav class="apptabs">
@@ -72,25 +72,21 @@ function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()=
 const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
 
 /* ===== Fixed params ===== */
-const TDEE = 2200; // per user request
-// Trajectory: 77 kg on Oct 14 -> 68 kg on Nov 29
-const TRAJ_START_DATE = new Date('2025-10-14T00:00:00');
-const TRAJ_START_WT = 77.0;
-const TRAJ_END_DATE = new Date('2025-11-29T00:00:00');
-const TRAJ_END_WT = 68.0;
-// app range
+const TDEE = 2200;
 const START=new Date('2025-10-12T00:00:00'), END=new Date('2025-12-01T00:00:00');
+// Trajectory: 77 kg on Oct 14 -> 68 kg on Nov 29
+const TRAJ_START = new Date('2025-10-14T00:00:00');
+const TRAJ_END   = new Date('2025-11-29T00:00:00');
+const WT_START = 77.0, WT_END = 68.0;
 
-/* ===== Rotations, Travel, Workouts (sets×reps) ===== */
+/* ===== Rotations / Travel / Workouts (sets×reps) ===== */
 const PH=[{w:[1,2],p:175},{w:[3,4,5],p:175},{w:[6,7],p:175}];
 function phase(w){ return PH.find(x=>x.w.includes(w))||PH[PH.length-1]; }
 function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
 function dn(d){ return d.toLocaleDateString('en-US',{weekday:'short'}); }
 function lab(d){ return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'}); }
-function isCheat(d){ /* computed separately below */ return false; }
-// travel Thu Oct 16 -> Mon Oct 20
-const T_FROM=new Date('2025-10-16T00:00:00'), T_TO=new Date('2025-10-20T23:59:59');
-function isTravel(d){ return d>=T_FROM && d<=T_TO; }
+const TRAVEL_FROM=new Date('2025-10-16T00:00:00'), TRAVEL_TO=new Date('2025-10-20T23:59:59');
+function isTravel(d){ return d>=TRAVEL_FROM && d<=TRAVEL_TO; }
 function wo(week, jsDay, d){
   if(isTravel(d)){
     if(jsDay===0) return "Travel — Active Recovery: Walk 30–40 min + mobility 10 min";
@@ -114,14 +110,14 @@ function wo(week, jsDay, d){
   return "Rest / Active Recovery (Walk + Stretch)";
 }
 
-/* ===== Cheat days schedule ===== */
+/* ===== Cheats ===== */
 const CHEAT_DAYS = new Set();
 // every 10 days from Oct 14
 (function(){
   let d = new Date('2025-10-14T00:00:00');
   while (d <= new Date('2025-12-31T00:00:00')){ CHEAT_DAYS.add(isoLocal(d)); d = addDays(d,10); }
 })();
-// next Saturday after Oct 22, 2025 (Oct 25, 2025)
+// next Saturday after Oct 22, 2025 (Oct 25)
 (function(){
   const now = new Date('2025-10-22T00:00:00');
   let d = new Date(now);
@@ -129,19 +125,17 @@ const CHEAT_DAYS = new Set();
   CHEAT_DAYS.add(isoLocal(d));
 })();
 
-/* ===== Calorie target calculator ===== */
+/* ===== Calorie solver for trajectory window ===== */
 const KCAL_PER_KG = 7700;
-const total_deficit_needed = (TRAJ_START_WT - TRAJ_END_WT) * KCAL_PER_KG;
-const allDays = []; let dd=new Date(TRAJ_START_DATE); while(dd<=TRAJ_END_DATE){ allDays.push(new Date(dd)); dd=addDays(dd,1); }
-const cheatIntakes = allDays.map(d => CHEAT_DAYS.has(isoLocal(d)) ? 3000 : null);
+const total_deficit_needed = (WT_START - WT_END) * KCAL_PER_KG;
+const winDays = []; let d0=new Date(TRAJ_START); while(d0<=TRAJ_END){ winDays.push(new Date(d0)); d0=addDays(d0,1); }
+const cheatIntakes = winDays.map(d => CHEAT_DAYS.has(isoLocal(d)) ? 3000 : null);
 const numNonCheat = cheatIntakes.filter(x => x===null).length;
-const cheatDeficitSum = allDays.reduce((s,d,i)=>{ const c=cheatIntakes[i]; return s + ((0 if cheatIntakes[i] is None else (TDEE - cheatIntakes[i]))); }, 0)
-
-// baseCal solves: sum(TDEE - intake) over window = total_deficit_needed
-const baseCal = TDEE - ((total_deficit_needed - allDays.reduce((s, d, i) => s + (cheatIntakes[i]===null ? 0 : (TDEE - cheatIntakes[i])), 0)) / Math.max(1, numNonCheat));
+const cheatDeficitSum = winDays.reduce((s,_,i)=> s + (cheatIntakes[i]===null ? 0 : (TDEE - cheatIntakes[i])), 0);
+// Solve for base daily intake on non-cheat days
+let baseCal = TDEE - ((total_deficit_needed - cheatDeficitSum) / Math.max(1, numNonCheat));
 const BASE_CAL = Math.max(1500, Math.min(2200, Math.round(baseCal)));
 
-// macros per kcal
 function macrosFor(kcal, proteinG=175){
   const pK = proteinG * 4;
   const fatK = Math.round(kcal * 0.30);
@@ -151,7 +145,7 @@ function macrosFor(kcal, proteinG=175){
   return { p: proteinG, c: carbsG, f: fatG };
 }
 
-/* ===== Build plan with new calories ===== */
+/* ===== Build plan with calories ===== */
 function buildPlan(){
   const out=[]; let d=new Date(START), w=1;
   while(d<=END){
@@ -160,17 +154,14 @@ function buildPlan(){
     let type = desc.startsWith("Cardio") ? "cardio"
              : (desc.startsWith("Upper Power")||desc.startsWith("Push")||desc.startsWith("Pull")||desc.startsWith("Legs")) ? "strength"
              : (desc.startsWith("Travel") ? (desc.includes("Skipping")?"hiit":"rest") : "rest");
-
-    // calories/macros
     let cal = 1950, p = 175, c = 150, f = 60;
     const dIso = isoLocal(d);
-    if (d >= new Date('2025-10-14') && d <= new Date('2025-11-29')){
+    if (d >= TRAJ_START && d <= TRAJ_END){
       if (CHEAT_DAYS.has(dIso)){ cal = 3000; const m = macrosFor(cal, 150); p=m.p; c=m.c; f=m.f; type='rest'; }
       else { cal = BASE_CAL; const m = macrosFor(cal, 175); p=m.p; c=m.c; f=m.f; }
     }
     const burnMap = { strength: 400, cardio: 325, hiit: 275, rest: 150 };
     const burn = burnMap[type] || burnMap.rest;
-
     out.push({date:new Date(d), week:w, dayName:dn(d), label:lab(d), desc, type, cal, p, c, f, burn});
     d=addDays(d,1);
   }
@@ -178,15 +169,14 @@ function buildPlan(){
 }
 const planDays=buildPlan();
 
-/* ===== Projection series (77kg Oct 14 -> 68kg Nov 29) ===== */
+/* ===== Projection series (77 -> 68) ===== */
 function projectedSeries(){
   const out=[]; let d=new Date(START);
-  const S=new Date('2025-10-14'), E=new Date('2025-11-29');
   while(d<=END){
     let wt;
-    if (d < S) wt = 77.0;
-    else if (d > E) wt = 68.0;
-    else { const t=(d - S)/(E - S); wt = +(77.0 + t*(68.0 - 77.0)).toFixed(1); }
+    if (d < TRAJ_START) wt = WT_START;
+    else if (d > TRAJ_END) wt = WT_END;
+    else { const t=(d - TRAJ_START)/(TRAJ_END - TRAJ_START); wt = +(WT_START + t*(WT_END - WT_START)).toFixed(1); }
     out.push({ date: isoLocal(d), wt });
     d=addDays(d,1);
   }
@@ -202,7 +192,6 @@ function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
 function renderTracker(){
   const root=document.getElementById('page-tracker'); clear(root);
   const today=new Date();
-  // group by week
   const map=new Map(); planDays.forEach(d=>{ if(!map.has(d.week)) map.set(d.week,[]); map.get(d.week).push(d); });
   const weeks=[...map.entries()].map(([w,items])=>({week:w,items}));
   let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week || weeks[0].week;
@@ -231,7 +220,7 @@ function renderTracker(){
       li.append(grid);
       const grid2=el('div',{class:'grid2'});
       const proj = projected.find(p=>p.date===isoLocal(d.date));
-      [['Protein',d.p+' g'],['Projected Wt', proj ? proj.wt+' kg' : '']]
+      [['Protein',d.p+' g'],['Projected Wt', proj ? proj.wt+' kg' : '' ]]
         .forEach(([t,v])=> grid2.append(el('div',{class:'pill'}, el('div',{class:'t'},t), el('div',{class:'v'},v))));
       container.appendChild(li);
     });
@@ -301,14 +290,11 @@ function renderProj(){
   const labels=[], projWt=[], realWt=[];
   let d=new Date(START);
   while(d<=END){ const iso=isoLocal(d); labels.push(iso);
-    // projected
     let wt;
-    const S=new Date('2025-10-14'), E=new Date('2025-11-29');
-    if (d < S) wt = 77.0;
-    else if (d > E) wt = 68.0;
-    else { const t=(d - S)/(E - S); wt = +(77.0 + t*(68.0 - 77.0)).toFixed(1); }
+    if (d < TRAJ_START) wt = WT_START;
+    else if (d > TRAJ_END) wt = WT_END;
+    else { const t=(d - TRAJ_START)/(TRAJ_END - TRAJ_START); wt = +(WT_START + t*(WT_END - WT_START)).toFixed(1); }
     projWt.push(wt);
-    // realized
     realWt.push(bwMap.get(iso) ?? null);
     d=addDays(d,1);
   }
@@ -332,12 +318,12 @@ if(!window.__delegated){
     if(t.id==='tl-add'){ const ex=(document.getElementById('tl-ex')||{}).value||'Bench Press'; const w=Number((document.getElementById('tl-w')||{}).value||0); const r=Number((document.getElementById('tl-r')||{}).value||0); const d=(document.getElementById('tl-d')||{}).value||isoLocal(new Date()); const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push({id:crypto.randomUUID(), date:d, exercise:ex, weight:w, reps:r}); localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return; }
     if(t.dataset && t.dataset.action==='del-lift'){ const id=t.dataset.id; const arr=(JSON.parse(localStorage.getItem(SK.LIFTS)||'[]')).filter(x=>x.id!==id); localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return; }
     if(t.id==='bw-add'){ const vdate=(document.getElementById('bw-d')||{}).value||''; const vwt=Number((document.getElementById('bw-w')||{}).value||0); if(!vdate){ alert('Pick a date'); return; } const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==vdate); a.push({date:vdate, weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date)); localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return; }
-    if(t.dataset && t.dataset.action==='del-bw'){ const d=t.dataset.date; const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==d); localStorage.setItem(SK_BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return; }
+    if(t.dataset && t.dataset.action==='del-bw'){ const d=t.dataset.date; const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==d); localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return; }
   });
   window.__delegated=true;
 }
 
-// initial
+// Initial render
 renderTracker();
 </script>
 </body>
