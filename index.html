@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fat-Loss Tracker</title>
-<link rel="manifest" href="manifest.webmanifest?v=3.10">
-<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.10">
+<link rel="manifest" href="manifest.webmanifest?v=3.11.2200">
+<link rel="apple-touch-icon" href="icons/icon-192.svg?v=3.11.2200">
 <meta name="theme-color" content="#0b5fff">
 <style>
   :root{--bg:#f6f7f9;--fg:#111;--muted:#666;--card:#fff;--accent:#0b5fff;--ring:#3b82f6}
@@ -14,15 +14,12 @@
   .wrap{max-width:900px;margin:0 auto;padding:12px}
   h1{font-size:20px;margin:10px 0 6px 0}
   .sub{color:var(--muted);font-size:12px;margin-bottom:8px}
-  /* Main app tabs */
   .apptabs{display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;position:relative;z-index:5}
   .apptab{border:1px solid #ccc;border-radius:999px;padding:8px 12px;background:#fff;cursor:pointer}
   .apptab.active{background:#000;color:#fff;border-color:#000}
-  /* Week chips (inside tracker) */
   .weektabs{display:flex;flex-wrap:wrap;gap:8px;padding-bottom:8px}
   .weektab{border:1px solid #ccc;border-radius:999px;padding:6px 10px;background:#fff;cursor:pointer}
   .weektab.active{background:#000;color:#fff;border-color:#000}
-  /* Cards / grids */
   .row{background:var(--card);border:1px solid #e5e7eb;border-radius:14px;padding:10px;margin:8px 0}
   .row.today{outline:2px solid var(--ring)}
   .datewrap{display:flex;align-items:center;gap:6px}
@@ -34,7 +31,7 @@
   .grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:6px}
   input, select{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px}
   .btn{font-size:12px;border:1px solid #ddd;border-radius:8px;padding:6px 10px;background:#f3f4f6;cursor:pointer}
-  .btn.danger{background:#fee2e2;color:#b911c1;border-color:#fecaca}
+  .btn.danger{background:#fee2e2;color:#b91c1c;border-color:#fecaca}
   .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:10px}
   .grid3{display:grid;grid-template-columns:1fr 90px 140px;gap:8px}
   table{width:100%;border-collapse:collapse}
@@ -48,10 +45,9 @@
 <div class="wrap">
   <header>
     <h1>Fat-Loss Tracker</h1>
-    <div class="sub">v3.10 • Classic UI • All tabs • iPhone-friendly</div>
+    <div class="sub">v3.11 (TDEE 2200) • New trajectory & calorie targets</div>
   </header>
 
-  <!-- Main app tabs -->
   <nav class="apptabs">
     <button class="apptab active" id="app-tracker">Tracker</button>
     <button class="apptab" id="app-train">Training Log</button>
@@ -70,22 +66,28 @@
 </div>
 
 <script>
-/* ---------- helpers ---------- */
+/* ===== Helpers ===== */
 function isoLocal(d){ const dt=new Date(d); const y=dt.getFullYear(), m=('0'+(dt.getMonth()+1)).slice(-2), da=('0'+dt.getDate()).slice(-2); return y+'-'+m+'-'+da; }
 function sameDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 const SK={LIFTS:'flt-lifts', BW:'flt-bw'};
 
-/* ---------- plan + rotations + travel ---------- */
+/* ===== Fixed params ===== */
+const TDEE = 2200; // per user request
+// Trajectory: 77 kg on Oct 14 -> 68 kg on Nov 29
+const TRAJ_START_DATE = new Date('2025-10-14T00:00:00');
+const TRAJ_START_WT = 77.0;
+const TRAJ_END_DATE = new Date('2025-11-29T00:00:00');
+const TRAJ_END_WT = 68.0;
+// app range
 const START=new Date('2025-10-12T00:00:00'), END=new Date('2025-12-01T00:00:00');
-const GOAL=[75.8,74.6,73.2,71.8,70.3,68.8,67.0];
-const PH=[{w:[1,2],cal:1950,p:175,c:160,f:60,b:{strength:375,cardio:300,hiit:250,rest:150}},
-          {w:[3,4,5],cal:1800,p:175,c:130,f:55,b:{strength:425,cardio:350,hiit:300,rest:150}},
-          {w:[6,7],cal:1950,p:175,c:150,f:60,b:{strength:325,cardio:275,hiit:250,rest:150}}];
+
+/* ===== Rotations, Travel, Workouts (sets×reps) ===== */
+const PH=[{w:[1,2],p:175},{w:[3,4,5],p:175},{w:[6,7],p:175}];
 function phase(w){ return PH.find(x=>x.w.includes(w))||PH[PH.length-1]; }
 function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
 function dn(d){ return d.toLocaleDateString('en-US',{weekday:'short'}); }
 function lab(d){ return d.toLocaleDateString('en-US',{month:'short',day:'2-digit'}); }
-function isCheat(d){ const k=Math.floor((d-START)/86400000); return k>=0 && k%10===6; }
+function isCheat(d){ /* computed separately below */ return false; }
 // travel Thu Oct 16 -> Mon Oct 20
 const T_FROM=new Date('2025-10-16T00:00:00'), T_TO=new Date('2025-10-20T23:59:59');
 function isTravel(d){ return d>=T_FROM && d<=T_TO; }
@@ -111,33 +113,96 @@ function wo(week, jsDay, d){
   if(jsDay===6){ return "Cardio: Zone 2 30–40 min (or Skipping Intervals)"; }
   return "Rest / Active Recovery (Walk + Stretch)";
 }
+
+/* ===== Cheat days schedule ===== */
+const CHEAT_DAYS = new Set();
+// every 10 days from Oct 14
+(function(){
+  let d = new Date('2025-10-14T00:00:00');
+  while (d <= new Date('2025-12-31T00:00:00')){ CHEAT_DAYS.add(isoLocal(d)); d = addDays(d,10); }
+})();
+// next Saturday after Oct 22, 2025 (Oct 25, 2025)
+(function(){
+  const now = new Date('2025-10-22T00:00:00');
+  let d = new Date(now);
+  while (d.getDay() !== 6) d = addDays(d,1);
+  CHEAT_DAYS.add(isoLocal(d));
+})();
+
+/* ===== Calorie target calculator ===== */
+const KCAL_PER_KG = 7700;
+const total_deficit_needed = (TRAJ_START_WT - TRAJ_END_WT) * KCAL_PER_KG;
+const allDays = []; let dd=new Date(TRAJ_START_DATE); while(dd<=TRAJ_END_DATE){ allDays.push(new Date(dd)); dd=addDays(dd,1); }
+const cheatIntakes = allDays.map(d => CHEAT_DAYS.has(isoLocal(d)) ? 3000 : null);
+const numNonCheat = cheatIntakes.filter(x => x===null).length;
+const cheatDeficitSum = allDays.reduce((s,d,i)=>{ const c=cheatIntakes[i]; return s + ((0 if cheatIntakes[i] is None else (TDEE - cheatIntakes[i]))); }, 0)
+
+// baseCal solves: sum(TDEE - intake) over window = total_deficit_needed
+const baseCal = TDEE - ((total_deficit_needed - allDays.reduce((s, d, i) => s + (cheatIntakes[i]===null ? 0 : (TDEE - cheatIntakes[i])), 0)) / Math.max(1, numNonCheat));
+const BASE_CAL = Math.max(1500, Math.min(2200, Math.round(baseCal)));
+
+// macros per kcal
+function macrosFor(kcal, proteinG=175){
+  const pK = proteinG * 4;
+  const fatK = Math.round(kcal * 0.30);
+  const fatG = Math.max(35, Math.round(fatK / 9));
+  const carbsK = Math.max(0, kcal - pK - fatG*9);
+  const carbsG = Math.max(0, Math.round(carbsK / 4));
+  return { p: proteinG, c: carbsG, f: fatG };
+}
+
+/* ===== Build plan with new calories ===== */
 function buildPlan(){
   const out=[]; let d=new Date(START), w=1;
   while(d<=END){
     if(d.getDay()===1 && out.length) w++;
-    const ph=phase(w);
     const desc=wo(w,d.getDay(),d);
     let type = desc.startsWith("Cardio") ? "cardio"
              : (desc.startsWith("Upper Power")||desc.startsWith("Push")||desc.startsWith("Pull")||desc.startsWith("Legs")) ? "strength"
              : (desc.startsWith("Travel") ? (desc.includes("Skipping")?"hiit":"rest") : "rest");
-    let cal=ph.cal, p=ph.p, c=ph.c, f=ph.f;
-    if(isCheat(d)){ cal=3000; type='rest'; }
-    const burn=ph.b[type]||ph.b.rest;
-    out.push({date:new Date(d), week:w, dayName:dn(d), label:lab(d), desc, type, cal, p, c, f, burn, goal: GOAL[Math.min(w-1,GOAL.length-1)]});
+
+    // calories/macros
+    let cal = 1950, p = 175, c = 150, f = 60;
+    const dIso = isoLocal(d);
+    if (d >= new Date('2025-10-14') && d <= new Date('2025-11-29')){
+      if (CHEAT_DAYS.has(dIso)){ cal = 3000; const m = macrosFor(cal, 150); p=m.p; c=m.c; f=m.f; type='rest'; }
+      else { cal = BASE_CAL; const m = macrosFor(cal, 175); p=m.p; c=m.c; f=m.f; }
+    }
+    const burnMap = { strength: 400, cardio: 325, hiit: 275, rest: 150 };
+    const burn = burnMap[type] || burnMap.rest;
+
+    out.push({date:new Date(d), week:w, dayName:dn(d), label:lab(d), desc, type, cal, p, c, f, burn});
     d=addDays(d,1);
   }
   return out;
 }
 const planDays=buildPlan();
 
-/* ---------- UI helpers ---------- */
+/* ===== Projection series (77kg Oct 14 -> 68kg Nov 29) ===== */
+function projectedSeries(){
+  const out=[]; let d=new Date(START);
+  const S=new Date('2025-10-14'), E=new Date('2025-11-29');
+  while(d<=END){
+    let wt;
+    if (d < S) wt = 77.0;
+    else if (d > E) wt = 68.0;
+    else { const t=(d - S)/(E - S); wt = +(77.0 + t*(68.0 - 77.0)).toFixed(1); }
+    out.push({ date: isoLocal(d), wt });
+    d=addDays(d,1);
+  }
+  return out;
+}
+const projected = projectedSeries();
+
+/* ===== UI helpers ===== */
 function el(tag, props={}, ...kids){ const e=document.createElement(tag); Object.entries(props).forEach(([k,v])=>{ if(k==='class') e.className=v; else if(k==='html') e.innerHTML=v; else e.setAttribute(k,v); }); kids.flat().forEach(k=>{ if(typeof k==='string') e.appendChild(document.createTextNode(k)); else if(k) e.appendChild(k); }); return e; }
 function clear(n){ while(n.firstChild) n.removeChild(n.firstChild); }
 
-/* ---------- Tracker page ---------- */
+/* ===== Pages ===== */
 function renderTracker(){
   const root=document.getElementById('page-tracker'); clear(root);
   const today=new Date();
+  // group by week
   const map=new Map(); planDays.forEach(d=>{ if(!map.has(d.week)) map.set(d.week,[]); map.get(d.week).push(d); });
   const weeks=[...map.entries()].map(([w,items])=>({week:w,items}));
   let activeWeek=weeks.find(w=>w.items.some(x=>sameDay(x.date,today)))?.week || weeks[0].week;
@@ -154,7 +219,7 @@ function renderTracker(){
   function draw(){
     clear(container);
     const w=weeks.find(x=>x.week===activeWeek);
-    container.append(el('div',{class:'sub'},`Week ${w.week} • Goal ${w.items[0].goal.toFixed(1)} kg`));
+    container.append(el('div',{class:'sub'},`Week ${w.week}`));
     w.items.forEach(d=>{
       const isToday=sameDay(d.date,today);
       const li=el('div',{class:'row'+(isToday?' today':'')});
@@ -165,15 +230,16 @@ function renderTracker(){
       [['Burn',d.burn+' kcal'],['Food',d.cal+' kcal'],['Carbs',d.c+' g'],['Fat',d.f+' g']].forEach(([t,v])=> grid.append(el('div',{class:'pill'}, el('div',{class:'t'},t), el('div',{class:'v'},v))));
       li.append(grid);
       const grid2=el('div',{class:'grid2'});
-      [['Protein',w.items[0].p+' g'],['Goal',w.items[0].goal.toFixed(1)+' kg']].forEach(([t,v])=> grid2.append(el('div',{class:'pill'}, el('div',{class:'t'},t), el('div',{class:'v'},v))));
-      li.append(grid2);
+      const proj = projected.find(p=>p.date===isoLocal(d.date));
+      [['Protein',d.p+' g'],['Projected Wt', proj ? proj.wt+' kg' : '']]
+        .forEach(([t,v])=> grid2.append(el('div',{class:'pill'}, el('div',{class:'t'},t), el('div',{class:'v'},v))));
       container.appendChild(li);
     });
   }
   draw();
 }
 
-/* ---------- Training Log ---------- */
+/* Training Log */
 function renderTrain(){
   const root=document.getElementById('page-train'); clear(root);
   const entries=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]');
@@ -200,7 +266,7 @@ function renderTrain(){
   });
 }
 
-/* ---------- Body Weight ---------- */
+/* Body Weight */
 function renderBW(){
   const root=document.getElementById('page-bw'); clear(root);
   const arr=JSON.parse(localStorage.getItem(SK.BW)||'[]');
@@ -216,7 +282,7 @@ function renderBW(){
   tbl.append(tb); root.append(tbl);
 }
 
-/* ---------- Trends / Projection ---------- */
+/* Trends / Projection */
 function epley1RM(w,r){ return w*(1+r/30); }
 function renderTrends(){
   const root=document.getElementById('page-trends'); clear(root);
@@ -231,59 +297,47 @@ function renderTrends(){
 }
 function renderProj(){
   const root=document.getElementById('page-proj'); clear(root);
-  const anchors=[]; for(let w=1; w<=7; w++){ const wk=planDays.filter(x=>x.week===w); if(wk.length){ anchors.push({ts:+wk[0].date, weight:wk[0].goal}); } } const last=planDays[planDays.length-1]; anchors.push({ts:+last.date, weight:last.goal});
   const bw=JSON.parse(localStorage.getItem(SK.BW)||'[]'); const bwMap=new Map(bw.map(x=>[x.date,x.weight]));
-  const proj=planDays.map(d=>{ const t=+d.date; let prev=anchors[0], next=anchors[anchors.length-1]; for(let i=0;i<anchors.length-1;i++){ if(t>=anchors[i].ts && t<=anchors[i+1].ts){ prev=anchors[i]; next=anchors[i+1]; break; } } const span=Math.max(1,next.ts-prev.ts); const a=Math.min(1,Math.max(0,(t-prev.ts)/span)); const projected=+(prev.weight+(next.weight-prev.weight)*a).toFixed(1); return {date: isoLocal(d.date), projected}; });
-  const labels=proj.map(p=>p.date), projected=proj.map(p=>p.projected), realized=labels.map(d=>bwMap.get(d) ?? null);
+  const labels=[], projWt=[], realWt=[];
+  let d=new Date(START);
+  while(d<=END){ const iso=isoLocal(d); labels.push(iso);
+    // projected
+    let wt;
+    const S=new Date('2025-10-14'), E=new Date('2025-11-29');
+    if (d < S) wt = 77.0;
+    else if (d > E) wt = 68.0;
+    else { const t=(d - S)/(E - S); wt = +(77.0 + t*(68.0 - 77.0)).toFixed(1); }
+    projWt.push(wt);
+    // realized
+    realWt.push(bwMap.get(iso) ?? null);
+    d=addDays(d,1);
+  }
   const can=el('canvas'); can.height=320; const card=el('div',{class:'card'}, can); root.append(card);
-  new Chart(can.getContext('2d'), {type:'line', data:{labels, datasets:[{label:'Projected (kg)', data: projected, borderColor:'#0b5fff', tension:0.2, pointRadius:0}, {label:'Realized (kg)', data: realized, borderColor:'#16a34a', tension:0.2, pointRadius:3}]}, options:{maintainAspectRatio:false}});
+  new Chart(can.getContext('2d'), {type:'line', data:{labels, datasets:[{label:'Projected (kg)', data:projWt, borderColor:'#0b5fff', tension:0.25, pointRadius:0}, {label:'Realized (kg)', data:realWt, borderColor:'#16a34a', tension:0.2, pointRadius:3}]}, options:{maintainAspectRatio:false}});
 }
 
-/* ---------- Event delegation ---------- */
+/* Event delegation */
 if(!window.__delegated){
-  document.addEventListener('click', (e)=>{
+  document.addEventListener('click',(e)=>{
     const t=e.target; if(!(t instanceof Element)) return;
-    // main app tabs
+    // main tabs
     if(t.id && t.id.startsWith('app-')){
-      const id=t.id.replace('app-','');
-      const ids=['tracker','train','bw','trends','proj'];
+      const id=t.id.replace('app-',''); const ids=['tracker','train','bw','trends','proj'];
       ids.forEach(n=> document.getElementById('page-'+n).style.display=(n===id)?'block':'none');
       document.querySelectorAll('.apptab').forEach(btn=> btn.classList.toggle('active', btn.id==='app-'+id));
-      if(id==='tracker') renderTracker();
-      if(id==='train') renderTrain();
-      if(id==='bw') renderBW();
-      if(id==='trends') renderTrends();
-      if(id==='proj') renderProj();
+      if(id==='tracker') renderTracker(); if(id==='train') renderTrain(); if(id==='bw') renderBW(); if(id==='trends') renderTrends(); if(id==='proj') renderProj();
       return;
     }
-    // add / delete
-    if(t.id==='tl-add'){
-      const ex=(document.getElementById('tl-ex')||{}).value || "Bench Press";
-      const w =Number((document.getElementById('tl-w')||{}).value || 0);
-      const r =Number((document.getElementById('tl-r')||{}).value || 0);
-      const d =(document.getElementById('tl-d')||{}).value || isoLocal(new Date());
-      const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push({id:crypto.randomUUID(), date:d, exercise:ex, weight:w, reps:r});
-      localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return;
-    }
-    if(t.dataset && t.dataset.action==='del-lift'){
-      const id=t.dataset.id; const arr=(JSON.parse(localStorage.getItem(SK.LIFTS)||'[]')).filter(x=>x.id!==id);
-      localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return;
-    }
-    if(t.id==='bw-add'){
-      const vdate=(document.getElementById('bw-d')||{}).value || ''; const vwt=Number((document.getElementById('bw-w')||{}).value || 0);
-      if(!vdate){ alert('Pick a date'); return; }
-      const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==vdate); a.push({date:vdate, weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date));
-      localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return;
-    }
-    if(t.dataset && t.dataset.action==='del-bw'){
-      const d=t.dataset.date; const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==d);
-      localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return;
-    }
+    // add/delete
+    if(t.id==='tl-add'){ const ex=(document.getElementById('tl-ex')||{}).value||'Bench Press'; const w=Number((document.getElementById('tl-w')||{}).value||0); const r=Number((document.getElementById('tl-r')||{}).value||0); const d=(document.getElementById('tl-d')||{}).value||isoLocal(new Date()); const arr=JSON.parse(localStorage.getItem(SK.LIFTS)||'[]'); arr.push({id:crypto.randomUUID(), date:d, exercise:ex, weight:w, reps:r}); localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return; }
+    if(t.dataset && t.dataset.action==='del-lift'){ const id=t.dataset.id; const arr=(JSON.parse(localStorage.getItem(SK.LIFTS)||'[]')).filter(x=>x.id!==id); localStorage.setItem(SK.LIFTS, JSON.stringify(arr)); renderTrain(); return; }
+    if(t.id==='bw-add'){ const vdate=(document.getElementById('bw-d')||{}).value||''; const vwt=Number((document.getElementById('bw-w')||{}).value||0); if(!vdate){ alert('Pick a date'); return; } const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==vdate); a.push({date:vdate, weight:vwt}); a.sort((a,b)=>a.date.localeCompare(b.date)); localStorage.setItem(SK.BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return; }
+    if(t.dataset && t.dataset.action==='del-bw'){ const d=t.dataset.date; const a=(JSON.parse(localStorage.getItem(SK.BW)||'[]')).filter(x=>x.date!==d); localStorage.setItem(SK_BW, JSON.stringify(a)); renderBW(); if(window.__page==='proj') renderProj(); return; }
   });
   window.__delegated=true;
 }
 
-// Initial render
+// initial
 renderTracker();
 </script>
 </body>
